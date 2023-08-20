@@ -12,6 +12,7 @@ import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from itertools import islice
 from pathlib import Path
+from typing import List
 
 import openai
 import requests
@@ -140,7 +141,7 @@ class OpenAIWriter:
 
         return response.choices[0].message.content
 
-    def embeddings(self, input: list[str]) -> list[list[str]]:
+    def embeddings(self, input: List[str]) -> List[List[str]]:
         response = openai.Embedding.create(model="text-embedding-ada-002", input=input)
         return [data.embedding for data in response.data]
 
