@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+"""
+Converted from https://github.com/jawerty/10x-React-Engineer to use Ollama and Langchain
+
+$ ./react-assistant.py
+"""
 import re
 from pathlib import Path
 
