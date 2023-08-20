@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 
 
-def setup_logging(verbosity):
+def setup_logging(verbosity: int) -> None:
     logging_level = logging.WARNING
     if verbosity == 1:
         logging_level = logging.INFO
@@ -37,7 +37,7 @@ def setup_logging(verbosity):
     logging.captureWarnings(capture=True)
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = ArgumentParser(description=__doc__, formatter_class=RawDescriptionHelpFormatter)
     parser.add_argument(
         "-v",
@@ -124,7 +124,7 @@ class Summary:
 
 
 class OpenAIWriter:
-    def write_report(self, webpage_text):
+    def write_report(self, webpage_text: str) -> str:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -153,7 +153,7 @@ class SummaryGenerator:
         return " ".join([summary.summary_text for summary in summaries])
 
 
-def main(args):
+def main(args: argparse.Namespace) -> None:
     question = Question(args.question)
     search_engine = SearchEngine()
     websites = search_engine.search_for_question(question.receive_question())
