@@ -42,6 +42,13 @@ def parse_args():
         dest="verbose",
         help="Increase verbosity of logging output",
     )
+    parser.add_argument(
+        "-q",
+        "--question",
+        type=str,
+        required=True,
+        help="Question to be processed",
+    )
     return parser.parse_args()
 
 
