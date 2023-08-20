@@ -3,13 +3,16 @@
 A simple script
 
 Usage:
-./template_py_scripts.py -h
+./py-intern.py -h
 
-./template_py_scripts.py -v # To log INFO messages
-./template_py_scripts.py -vv # To log DEBUG messages
+./py-intern.py -q "I want to develop a quiz application in React"
 """
 import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
+
+from box import Box
+from langchain.llms import Ollama
+from langchain.output_parsers import ResponseSchema, StructuredOutputParser
 
 
 def setup_logging(verbosity):
@@ -52,9 +55,37 @@ def parse_args():
     return parser.parse_args()
 
 
+class ModelWrapper:
+    def __init__(self, model):
+        self.llm = Ollama(model=model)
+
+    def generate(self, question):
+        return self.llm(question)
+
+
+PROJECT_SUMMARY_PROMPT = """
+[INST] You will receive a description of what the user is trying to build.
+You will generate a single project name for the code project which should be in very short and limited to 3 words.
+Formal instructions: {}
+Project Description: {} [/INST]
+"""
+
+
+def project_name_generator(model, question):
+    output_parser = StructuredOutputParser.from_response_schemas(
+        [ResponseSchema(name="project_name", description="Project Name")]
+    )
+    format_instructions = output_parser.get_format_instructions()
+    final_prompt = PROJECT_SUMMARY_PROMPT.format(format_instructions, question)
+    logging.debug(f"Prompt for project name generator: {final_prompt}")
+    generated_output = model.generate(final_prompt)
+    return Box(output_parser.parse(generated_output)).project_name
+
+
 def main(args):
-    logging.debug(f"This is a debug log message: {args.verbose}")
-    logging.info(f"This is an info log message: {args.verbose}")
+    model = ModelWrapper(model="llama2:13b")
+    project_name = project_name_generator(model, args.question)
+    print(project_name)
 
 
 if __name__ == "__main__":

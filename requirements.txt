@@ -1,0 +1,9 @@
+langchain
+pre-commit
+flake8
+black
+autoflake
+isort
+pyupgrade
+bpython
+python-box[all]
