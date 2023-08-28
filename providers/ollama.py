@@ -16,9 +16,9 @@ class OllamaProvider:
     def __str__(self) -> str:
         return f"[Ollama Provider {self.model_name}]"
 
-    def generate_completion(self, prompt: str) -> Dict[str, Union[str, List[str]]]:
+    def generate_completion(self, prompt: str, **kwargs) -> Dict[str, Union[str, List[str]]]:
         params = {"model": self.model_name, "prompt": prompt}
-
+        params.update(kwargs)
         logging.debug(f"Calling Ollama API: {json.dumps(params)}")
         try:
             response = requests.post(
