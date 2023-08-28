@@ -16,6 +16,7 @@ class OllamaProvider:
     def __str__(self) -> str:
         return f"[Ollama Provider {self.model_name}]"
 
+    # https://github.com/jmorganca/ollama/blob/main/docs/api.md#generate-a-completion
     def generate_completion(self, prompt: str, **kwargs) -> Dict[str, Union[str, List[str]]]:
         params = {"model": self.model_name, "prompt": prompt}
         params.update(kwargs)
