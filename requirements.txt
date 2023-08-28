@@ -7,3 +7,8 @@ isort
 pyupgrade
 bpython
 python-box[all]
+duckduckgo_search
+requests
+beautifulsoup4
+slug
+openai
