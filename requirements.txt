@@ -12,3 +12,5 @@ requests
 beautifulsoup4
 slug
 openai
+typer[all]
+rich
