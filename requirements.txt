@@ -18,3 +18,8 @@ litellm
 pyautogen[retrievechat]
 flaml[automl]
 docker
+llama-index
+transformers
+accelerate
+bitsandbytes
+streamlit
