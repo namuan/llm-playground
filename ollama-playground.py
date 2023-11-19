@@ -19,16 +19,27 @@ ollama_provider = OllamaProvider()
 
 def get_response(model, user_input, max_tokens, top_p):
     try:
+        full_response = ""
         chat_completion = completion(
             model=f"ollama/{model}",
             messages=[{"role": "user", "content": user_input}],
             api_base="http://localhost:11434",
             max_tokens=max_tokens,
             top_p=top_p,
+            stream=True,
         )
-        return chat_completion.choices[0].message.content, None
+        placeholder = st.empty()
+        for message in chat_completion:
+            full_response += message.choices[0].delta.content or ""
+            placeholder.markdown(full_response + "▌")
+
+        st.session_state.messages.append(
+            {"role": "assistant", "content": full_response}
+        )
+
+        return None
     except Exception as e:
-        return None, str(e)
+        return str(e)
 
 
 initial_message = {"role": "assistant", "content": "How may I assist you today?"}
@@ -65,14 +76,9 @@ def main():
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                response, error = get_response(selected_model, prompt, max_tokens, top_p)
+                error = get_response(selected_model, prompt, max_tokens, top_p)
                 if error:
                     st.error(f"Error: {error}")
-                else:
-                    placeholder = st.empty()
-                    placeholder.markdown(response)
-                    message = {"role": "assistant", "content": response}
-                    st.session_state.messages.append(message)
 
     st.sidebar.button("Clear Chat History", on_click=clear_chat_history)
 
