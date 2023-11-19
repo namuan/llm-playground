@@ -14,7 +14,9 @@ from itertools import islice
 from pathlib import Path
 from typing import List
 
-import openai
+from openai import OpenAI
+
+client = OpenAI()
 import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
@@ -126,23 +128,21 @@ class Summary:
 
 class OpenAIWriter:
     def write_report(self, webpage_text: str) -> str:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Summarize content you are provided.Ignore any whitespace and irrelevant information.",
-                },
-                {"role": "user", "content": webpage_text},
-            ],
-            temperature=0,
-            max_tokens=1024,
-        )
+        response = client.chat.completions.create(model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": "Summarize content you are provided.Ignore any whitespace and irrelevant information.",
+            },
+            {"role": "user", "content": webpage_text},
+        ],
+        temperature=0,
+        max_tokens=1024)
 
         return response.choices[0].message.content
 
     def embeddings(self, input: List[str]) -> List[List[str]]:
-        response = openai.Embedding.create(model="text-embedding-ada-002", input=input)
+        response = client.embeddings.create(model="text-embedding-ada-002", input=input)
         return [data.embedding for data in response.data]
 
 
