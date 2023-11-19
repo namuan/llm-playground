@@ -1,4 +1,7 @@
 import openai
+
+client = openai.OpenAI(base_url="http://0.0.0.0:8000")
+
 import streamlit as st
 
 st.set_page_config(page_title="CodeLlama Playground - via Ollama", page_icon="🦙")
@@ -7,13 +10,13 @@ st.image("https://images.emojiterra.com/twitter/v14.0/1024px/1f999.png", width=9
 
 API_KEY = "foo"
 
-MODEL_CODELLAMA = "codellama:7b-instruct"
+MODEL_CODELLAMA = "ollama/phind-codellama:latest"
 
+print(client.models.list())
 
 def get_response(api_key, model, user_input, max_tokens, top_p):
     try:
-        openai.api_key = API_KEY
-        chat_completion = openai.ChatCompletion.create(
+        chat_completion = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": user_input}],
             max_tokens=max_tokens,
@@ -21,7 +24,8 @@ def get_response(api_key, model, user_input, max_tokens, top_p):
         )
         return chat_completion.choices[0].message.content, None
     except Exception as e:
-        return None, str(e)
+        raise e
+        # return None, str(e)
 
 
 st.header("Meta's `CodeLlama` via [Ollama](https://ollama.ai)")
