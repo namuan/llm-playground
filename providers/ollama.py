@@ -6,21 +6,29 @@ from typing import Dict, List, Union
 import requests
 
 
+# https://github.com/jmorganca/ollama/blob/main/docs/api.md
 class OllamaProvider:
-    def __init__(self, model_name: str):
-        self.model_name = model_name
+    def get_available_models(self) -> List[str]:
+        logging.debug("get_available_models")
+        try:
+            response = requests.get(
+                f"{os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')}/api/tags",
+                timeout=5,
+            )
+            logging.debug("API Response: %s", response.text)
+            response.raise_for_status()
+            response_json = json.loads(response.text)
+            return [m["name"] for m in response_json["models"]]
+        except requests.RequestException as err:
+            raise err
 
-    def id(self) -> str:
-        return f"ollama:{self.model_name}"
-
-    def __str__(self) -> str:
-        return f"[Ollama Provider {self.model_name}]"
-
-    # https://github.com/jmorganca/ollama/blob/main/docs/api.md#generate-a-completion
-    def generate_completion(self, prompt: str, **kwargs) -> Dict[str, Union[str, List[str]]]:
-        params = {"model": self.model_name, "prompt": prompt}
+    #
+    def generate_completion(
+        self, model: str, prompt: str, **kwargs
+    ) -> Dict[str, Union[str, List[str]]]:
+        params = {"model": model, "prompt": prompt}
         params.update(kwargs)
-        logging.debug(f"Calling Ollama API: {json.dumps(params)}")
+        logging.debug(f"generate_completion: {json.dumps(params)}")
         try:
             response = requests.post(
                 f"{os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')}/api/generate",
@@ -52,6 +60,7 @@ class OllamaProvider:
 if __name__ == "__main__":
     PROMPT = """What is the capital of France?"""
 
-    llm_provider = OllamaProvider(model_name="llama2:13b")
-    llm_response = llm_provider.generate_completion(PROMPT)
+    llm_provider = OllamaProvider()
+    llm_response = llm_provider.generate_completion("llama2:13b", PROMPT)
     print(llm_response)
+    print(llm_provider.get_available_models())
