@@ -1,4 +1,5 @@
 langchain
+chromadb
 pre-commit
 flake8
 black
@@ -11,6 +12,7 @@ duckduckgo_search
 requests
 beautifulsoup4
 slug
+tiktoken
 openai
 typer[all]
 rich
