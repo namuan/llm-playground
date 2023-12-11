@@ -41,7 +41,9 @@ def setup_logging(verbosity: int) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = ArgumentParser(description=__doc__, formatter_class=RawDescriptionHelpFormatter)
+    parser = ArgumentParser(
+        description=__doc__, formatter_class=RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "-v",
         "--verbose",
@@ -87,8 +89,13 @@ class SearchEngine:
 
     def search_for_question(self, question_text: str) -> list:
         """Searches for the question and returns a list of search results."""
-        results = DDGS().text(question_text, region="wt-wt", safesearch="Off", timelimit="y")
-        return [Website(result["href"], result["title"], result["body"]) for result in islice(results, 10)]
+        results = DDGS().text(
+            question_text, region="wt-wt", safesearch="Off", timelimit="y"
+        )
+        return [
+            Website(result["href"], result["title"], result["body"])
+            for result in islice(results, 10)
+        ]
 
 
 class Website:
@@ -128,16 +135,18 @@ class Summary:
 
 class OpenAIWriter:
     def write_report(self, webpage_text: str) -> str:
-        response = client.chat.completions.create(model="gpt-3.5-turbo",
-        messages=[
-            {
-                "role": "system",
-                "content": "Summarize content you are provided.Ignore any whitespace and irrelevant information.",
-            },
-            {"role": "user", "content": webpage_text},
-        ],
-        temperature=0,
-        max_tokens=1024)
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Summarize content you are provided.Ignore any whitespace and irrelevant information.",
+                },
+                {"role": "user", "content": webpage_text},
+            ],
+            temperature=0,
+            max_tokens=1024,
+        )
 
         return response.choices[0].message.content
 

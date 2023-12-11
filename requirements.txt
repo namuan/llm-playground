@@ -23,3 +23,4 @@ transformers
 accelerate
 bitsandbytes
 streamlit
+panel

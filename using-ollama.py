@@ -20,6 +20,7 @@ from openai import OpenAI
 client = OpenAI(base_url="http://0.0.0.0:8000")
 
 chat_completion = client.chat.completions.create(
-    model="ollama/zephyr:latest", messages=[{"role": "user", "content": "Write a code review comment?"}]
+    model="ollama/zephyr:latest",
+    messages=[{"role": "user", "content": "Write a code review comment?"}],
 )
 print(chat_completion.choices[0].message.content)

@@ -1,12 +1,12 @@
 import base64
 import os
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build, Resource
+from googleapiclient.discovery import Resource, build
 from openai import OpenAI
 
 dotenv.load_dotenv()
@@ -226,10 +226,12 @@ def process_email(
         # Remove UNREAD label
         try:
             gmail.users().messages().modify(
-                userId="me", id=message_info["id"], body={
+                userId="me",
+                id=message_info["id"],
+                body={
                     "addLabelIds": ["CATEGORY_PROMOTIONS"],
-                    "removeLabelIds": ["UNREAD"]
-                }
+                    "removeLabelIds": ["UNREAD"],
+                },
             ).execute()
             print("✅ Email marked as read successfully")
             return 1
