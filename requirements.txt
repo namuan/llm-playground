@@ -26,3 +26,4 @@ accelerate
 bitsandbytes
 streamlit
 panel
+arxiv
