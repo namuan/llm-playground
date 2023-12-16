@@ -45,7 +45,6 @@ def calculate_mortgage_payment(
     """Get the monthly mortgage payment given an interest rate percentage."""
 
     # TODO: you must implement this to actually call it later
-    pass
 
 
 def get_article_details(
@@ -59,14 +58,12 @@ def get_article_details(
     date_published: formatted as "MM/DD/YYYY"'''
 
     # TODO: you must implement this to actually call it later
-    pass
 
 
 def get_weather(city: str) -> Weather:
     """Get the current weather given a city."""
 
     # TODO: you must implement this to actually call it later
-    pass
 
 
 def get_directions(start: str, destination: str) -> Directions:
@@ -75,7 +72,6 @@ def get_directions(start: str, destination: str) -> Directions:
     destination: end address as a string including zipcode (if any)"""
 
     # TODO: you must implement this to actually call it later
-    pass
 
 
 def get_type_name(t):
@@ -113,11 +109,11 @@ You have access to the following tools:
 {function_to_json(get_article_details)}
 
 You must follow these instructions:
-Always select one or more of the above tools based on the user query 
-If a tool is found, you must respond in the JSON format matching the following schema: 
+Always select one or more of the above tools based on the user query
+If a tool is found, you must respond in the JSON format matching the following schema:
 {{
    "tools": {{
-        "tool": "<name of the selected tool>", 
+        "tool": "<name of the selected tool>",
         "tool_input": <parameters for the selected tool, matching the tool's JSON schema
    }}
 }}
@@ -143,10 +139,15 @@ User Query:
         response = generate_full_completion(GPT_MODEL, question)
         try:
             tidy_response = (
-                response.get("response", response).strip().replace("\n", "").replace("\\", "")
+                response.get("response", response)
+                .strip()
+                .replace("\n", "")
+                .replace("\\", "")
             )
             print_json(tidy_response)
-            rich.print(f"[bold]Total duration: {int(response.get('total_duration')) / 1e9} seconds [/bold]")
+            rich.print(
+                f"[bold]Total duration: {int(response.get('total_duration')) / 1e9} seconds [/bold]"
+            )
         except Exception:
             print(f"❌ Unable to decode JSON. {response}")
 
