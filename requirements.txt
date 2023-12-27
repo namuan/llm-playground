@@ -27,3 +27,4 @@ bitsandbytes
 streamlit
 panel
 arxiv
+outlines
