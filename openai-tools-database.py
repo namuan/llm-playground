@@ -237,12 +237,14 @@ def main(args):
     print(assistant_message)
     if assistant_message.get("tool_calls"):
         results = execute_function_call(conn, assistant_message)
-        messages.append({
-            "role": "tool",
-            "tool_call_id": assistant_message["tool_calls"][0]["id"],
-            "name": assistant_message["tool_calls"][0]["function"]["name"],
-            "content": results
-        })
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": assistant_message["tool_calls"][0]["id"],
+                "name": assistant_message["tool_calls"][0]["function"]["name"],
+                "content": results,
+            }
+        )
     pretty_print_conversation(messages)
 
 
