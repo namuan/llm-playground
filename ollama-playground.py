@@ -7,6 +7,7 @@ A Streamlit app for playing with Ollama's models.
 pip install -r requirements.txt
 streamlit run ollama-playground.py
 """
+
 import streamlit as st
 from litellm import completion
 
