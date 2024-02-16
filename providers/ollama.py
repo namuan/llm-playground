@@ -34,7 +34,6 @@ class OllamaProvider:
                 f"{os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')}/api/generate",
                 headers={"Content-Type": "application/json"},
                 data=json.dumps(params),
-                timeout=5,
             )
             logging.debug("API Response: %s", response.text)
             response.raise_for_status()
