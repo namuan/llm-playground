@@ -61,6 +61,6 @@ if __name__ == "__main__":
     PROMPT = """What is the capital of France?"""
 
     llm_provider = OllamaProvider()
-    llm_response = llm_provider.generate_completion("llama2:13b", PROMPT)
+    llm_response = llm_provider.generate_completion("mistral:latest", PROMPT)
     print(llm_response)
     print(llm_provider.get_available_models())

@@ -3,7 +3,7 @@ Content-Type: application/json
 Accept: application/json
 
 {
-  "model": "mixtral",
+  "model": "mistral",
   "prompt": "You have access to the following tools:\ndef get_weather_data(coordinates)\ndef get_coordinates_from_city(city_name)\nYou must always select one or more of the above tools based on the user query and respond with only a JSON object matching the following schema: {'tool': <name of the selected tool>, 'tool_input': <parameters for the selected tool, matching the tool's JSON schema}.If there are multiple tools required then return multiple items in a json array.\nUser Query: what is the weather going to be like in London, UK?",
   "stream": false
 }
