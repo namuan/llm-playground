@@ -28,3 +28,16 @@ streamlit
 panel
 arxiv
 outlines
+unstructured
+markdown
+langchain-community
+langchainhub
+gradio
+langchain-core
+sentence-transformers
+einops
+chromadb
+pypdf
+youtube-transcript-api
+sentencepiece
+docx2txt
