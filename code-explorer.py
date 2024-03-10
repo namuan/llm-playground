@@ -25,19 +25,18 @@ code_splitter = RecursiveCharacterTextSplitter.from_language(
 texts = code_splitter.split_documents(documents)
 print(len(texts))
 
-from langchain.vectorstores import Chroma
+from langchain_community.embeddings import OllamaEmbeddings
+from langchain_community.vectorstores import Chroma
 
-from langchain.embeddings import OllamaEmbeddings
-
-DB_DIRECTORY = Path.cwd() / "target" / "db"
-embedding_provider = OllamaEmbeddings(model="llama2:latest")
+DB_DIRECTORY = Path.cwd() / "target"
+embedding_provider = OllamaEmbeddings(model="nomic-embed-text:latest")
 if DB_DIRECTORY.exists():
     db = Chroma(embedding_function=embedding_provider, persist_directory="target")
 else:
     DB_DIRECTORY.mkdir(parents=True, exist_ok=True)
     db = Chroma.from_documents(
         texts,
-        embedding=OllamaEmbeddings(model="llama2:latest"),
+        embedding=OllamaEmbeddings(model="nomic-embed-text:latest"),
         persist_directory="target",
     )
 retriever = db.as_retriever(
@@ -46,10 +45,10 @@ retriever = db.as_retriever(
 )
 
 from langchain.chains import ConversationalRetrievalChain
-from langchain.chat_models import ChatOllama
 from langchain.memory import ConversationSummaryMemory
+from langchain_community.chat_models import ChatOllama
 
-llm = ChatOllama(model_name="mistral")
+llm = ChatOllama(model="mistral:latest")
 memory = ConversationSummaryMemory(
     llm=llm, memory_key="chat_history", return_messages=True
 )

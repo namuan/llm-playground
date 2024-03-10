@@ -36,7 +36,6 @@ gradio
 langchain-core
 sentence-transformers
 einops
-chromadb
 pypdf
 youtube-transcript-api
 sentencepiece
