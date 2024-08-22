@@ -40,3 +40,4 @@ pypdf
 youtube-transcript-api
 sentencepiece
 docx2txt
+ollama
