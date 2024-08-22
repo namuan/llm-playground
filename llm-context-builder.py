@@ -19,14 +19,13 @@ def find_files(extensions, ignored_dirs, print_contents):
         for file in files:
             if any(file.endswith(ext) for ext in extensions):
                 file_path = os.path.join(root, file)
-                print(f"Found file: {file_path}")
+                print(f"# Found file: {file_path}")
 
                 if print_contents:
                     try:
                         with open(file_path) as f:
-                            print("File contents:")
                             print(f.read())
-                            print("-" * 50)  # Separator
+                            print("# " + ("-" * 50))  # Separator
                     except Exception as e:
                         print(f"Error reading file: {e}")
 
