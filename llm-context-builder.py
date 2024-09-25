@@ -11,11 +11,10 @@ import logging
 import os
 import shutil
 import tempfile
+import urllib.request
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from urllib.parse import urljoin, urlparse
 from zipfile import ZipFile
-
-import requests
 
 
 def setup_logging(verbosity):
@@ -60,11 +59,9 @@ def download_and_extract_repo(zip_url, target_folder):
     with tempfile.TemporaryDirectory() as temp_dir:
         zip_path = os.path.join(temp_dir, "repo.zip")
 
-        response = requests.get(zip_url)
-        response.raise_for_status()
-
-        with open(zip_path, "wb") as f:
-            f.write(response.content)
+        with urllib.request.urlopen(zip_url) as response:
+            with open(zip_path, "wb") as f:
+                f.write(response.read())
 
         with ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(temp_dir)
