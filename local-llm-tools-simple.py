@@ -15,7 +15,7 @@ def generate_full_completion(model: str, prompt: str, **kwargs) -> dict[str, str
     params = {"model": model, "prompt": prompt, "stream": False}
     try:
         response = requests.post(
-            f"http://localhost:11434/api/generate",
+            "http://localhost:11434/api/generate",
             headers={"Content-Type": "application/json"},
             data=json.dumps(params),
             timeout=60,
@@ -124,7 +124,7 @@ Do not add any additional Notes or Explanations
 User Query:
     """
 
-    GPT_MODEL = "mixtral"
+    GPT_MODEL = "llama3.2"
 
     prompts = [
         "What's the weather in London, UK?",
