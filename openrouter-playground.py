@@ -1,39 +1,15 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # dependencies = [
-#   "openai",
+#   "litellm",
 # ]
 # ///
-"""
-A simple script
-
-Usage:
-./template_py_scripts.py -h
-
-./template_py_scripts.py -v # To log INFO messages
-./template_py_scripts.py -vv # To log DEBUG messages
-"""
-import logging
 import os
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 
+import litellm
 
-def setup_logging(verbosity):
-    logging_level = logging.WARNING
-    if verbosity == 1:
-        logging_level = logging.INFO
-    elif verbosity >= 2:
-        logging_level = logging.DEBUG
-
-    logging.basicConfig(
-        handlers=[
-            logging.StreamHandler(),
-        ],
-        format="%(asctime)s - %(filename)s:%(lineno)d - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging_level,
-    )
-    logging.captureWarnings(capture=True)
+from logger import setup_logging
 
 
 def parse_args():
@@ -50,8 +26,6 @@ def parse_args():
     )
     return parser.parse_args()
 
-
-from openai import OpenAI
 
 models_to_try = [
     "google/gemini-2.0-flash-thinking-exp:free",
@@ -82,22 +56,20 @@ models_to_try = [
 
 def main(args):
     ork = os.getenv("OPENROUTER_API_KEY")
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=ork,
-    )
 
     for model in models_to_try:
         print(f"Using {model=}")
-        completion = client.chat.completions.create(
-            model=model,
+        response = litellm.completion(
+            model=f"openrouter/{model}",
             messages=[{"role": "user", "content": "What is the meaning of life?"}],
+            api_base="https://openrouter.ai/api/v1",
+            api_key=ork,
         )
-        if hasattr(completion, 'choices'):
-            print(completion)
+        if hasattr(response, 'choices'):
+            print(response)
             break  # Exit the loop if successful
 
-        if hasattr(completion, 'error') and completion.error.get('code') == 429:
+        if hasattr(response, 'error') and response.error.get('code') == 429:
             print(f"Error with {model=}")
             continue  # Try the next model
 
