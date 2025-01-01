@@ -16,17 +16,7 @@ from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from urllib.parse import urljoin, urlparse
 from zipfile import ZipFile
 
-
-def setup_logging(verbosity):
-    logging_level = logging.WARNING
-    if verbosity == 1:
-        logging_level = logging.INFO
-    elif verbosity >= 2:
-        logging_level = logging.DEBUG
-
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(message)s", level=logging_level
-    )
+from logger import setup_logging
 
 
 def parse_github_url(url):

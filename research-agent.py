@@ -8,7 +8,7 @@ Usage:
 ./research-agent.py -q QUESTION -f MARKDOWN_FILE
 ./research-agent.py -q "What is the best way to learn programming?" -f output.md
 """
-import logging
+import argparse
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from itertools import islice
 from pathlib import Path
@@ -16,28 +16,12 @@ from typing import List
 
 from openai import OpenAI
 
+from logger import setup_logging
+
 client = OpenAI()
 import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
-
-
-def setup_logging(verbosity: int) -> None:
-    logging_level = logging.WARNING
-    if verbosity == 1:
-        logging_level = logging.INFO
-    elif verbosity >= 2:
-        logging_level = logging.DEBUG
-
-    logging.basicConfig(
-        handlers=[
-            logging.StreamHandler(),
-        ],
-        format="%(asctime)s - %(filename)s:%(lineno)d - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging_level,
-    )
-    logging.captureWarnings(capture=True)
 
 
 def parse_args() -> argparse.Namespace:

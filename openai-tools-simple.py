@@ -3,7 +3,6 @@
 Playing with OpenAI tools and function
 https://cookbook.openai.com/examples/how_to_call_functions_with_chat_models
 """
-import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 
 from dotenv import load_dotenv
@@ -12,29 +11,13 @@ from openai.types.chat import ChatCompletionMessage
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 from termcolor import colored
 
+from logger import setup_logging
+
 load_dotenv()
 
 GPT_MODEL = "gpt-3.5-turbo-1106"
 
 client = OpenAI()
-
-
-def setup_logging(verbosity):
-    logging_level = logging.WARNING
-    if verbosity == 1:
-        logging_level = logging.INFO
-    elif verbosity >= 2:
-        logging_level = logging.DEBUG
-
-    logging.basicConfig(
-        handlers=[
-            logging.StreamHandler(),
-        ],
-        format="%(asctime)s - %(filename)s:%(lineno)d - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging_level,
-    )
-    logging.captureWarnings(capture=True)
 
 
 def parse_args():
