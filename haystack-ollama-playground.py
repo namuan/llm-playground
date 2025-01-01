@@ -3,6 +3,7 @@
 # dependencies = [
 #   "haystack-ai",
 #   "ollama-haystack",
+#   "chroma-haystack",
 # ]
 # ///
 """
@@ -19,6 +20,7 @@ Usage:
 """
 import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from pathlib import Path
 
 from haystack import Document, Pipeline
 from haystack.components.builders.prompt_builder import PromptBuilder
@@ -28,6 +30,7 @@ from haystack.document_stores.in_memory import InMemoryDocumentStore
 from haystack_integrations.components.embedders.ollama.document_embedder import OllamaDocumentEmbedder
 from haystack_integrations.components.embedders.ollama.text_embedder import OllamaTextEmbedder
 from haystack_integrations.components.generators.ollama import OllamaChatGenerator, OllamaGenerator
+from haystack_integrations.document_stores.chroma import ChromaDocumentStore
 
 
 def setup_logging(verbosity):
@@ -75,7 +78,8 @@ def parse_args():
 
 def run_generation_example():
     print("------ Running generation example")
-    document_store = InMemoryDocumentStore()
+    # document_store = InMemoryDocumentStore()
+    document_store = ChromaDocumentStore(persist_path=Path.cwd().joinpath("target").as_posix())
     document_store.write_documents(
         [
             Document(content="Super Mario was an important politician"),

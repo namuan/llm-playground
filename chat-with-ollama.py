@@ -1,3 +1,16 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = [
+#   "gradio",
+#   "langchain",
+#   "langchain-community",
+#   "langchain-ollama",
+#   "openai",
+#   "pypdf",
+#   "chromadb",
+#   "youtube-transcript-api",
+# ]
+# ///
 import argparse
 import os
 
@@ -9,8 +22,8 @@ from langchain_community.document_loaders import (
     TextLoader,
     YoutubeLoader,
 )
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
+from langchain_ollama import OllamaEmbeddings
 from openai import OpenAI
 
 from providers.ollama import OllamaProvider
@@ -48,10 +61,7 @@ openai_api_base = "http://127.0.0.1:11434/v1"
 # model_list = list(cfg_list.keys())
 client = OpenAI(api_key="EMPTY", base_url=openai_api_base)
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=512, chunk_overlap=50)
-emb = HuggingFaceEmbeddings(
-    model_name="nomic-ai/nomic-embed-text-v1.5",
-    model_kwargs={"trust_remote_code": True},
-)
+emb = OllamaEmbeddings(model="nomic-embed-text")
 vectorstore = None
 models_provider = OllamaProvider()
 model_list = models_provider.get_available_models()
@@ -278,7 +288,7 @@ with gr.Blocks(fill_height=True, theme=gr.themes.Soft()) as demo:
 
 
 def main():
-    demo.launch(inbrowser=True)
+    demo.launch(inbrowser=True, share=False)
 
 
 if __name__ == "__main__":

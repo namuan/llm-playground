@@ -1,8 +1,17 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = [
+#   "langchain",
+#   "langchain-community",
+#   "langchain-ollama",
+#   "langchain-chroma",
+# ]
+# ///
 from pathlib import Path
 
-from langchain.document_loaders.generic import GenericLoader
-from langchain.document_loaders.parsers import LanguageParser
 from langchain.text_splitter import Language
+from langchain_community.document_loaders.generic import GenericLoader
+from langchain_community.document_loaders.parsers.language.language_parser import LanguageParser
 
 repo_path = Path.home() / "code-reference" / "spring-petclinic-microservices"
 
@@ -14,7 +23,7 @@ loader = GenericLoader.from_filesystem(
 )
 
 documents = loader.load()
-print(len(documents))
+print(f"Total documents found: {len(documents)}")
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
@@ -23,10 +32,9 @@ code_splitter = RecursiveCharacterTextSplitter.from_language(
 )
 
 texts = code_splitter.split_documents(documents)
-print(len(texts))
 
-from langchain_community.embeddings import OllamaEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_ollama import OllamaEmbeddings
+from langchain_chroma import Chroma
 
 DB_DIRECTORY = Path.cwd() / "target"
 embedding_provider = OllamaEmbeddings(model="nomic-embed-text:latest")
@@ -46,9 +54,16 @@ retriever = db.as_retriever(
 
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationSummaryMemory
-from langchain_community.chat_models import ChatOllama
+from langchain_ollama import ChatOllama
 
-llm = ChatOllama(model="mistral:latest")
+from langchain import hub
+prompt = hub.pull("rlm/rag-prompt")
+
+example_messages = prompt.invoke(
+    {"context": "(context goes here)", "question": "(question goes here)"}
+).to_messages()
+
+llm = ChatOllama(model="llama3.2:latest")
 memory = ConversationSummaryMemory(
     llm=llm, memory_key="chat_history", return_messages=True
 )
