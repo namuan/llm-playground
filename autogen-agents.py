@@ -1,3 +1,9 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# dependencies = [
+#   "pyautogen"
+# ]
+# ///
 import random
 
 import autogen
