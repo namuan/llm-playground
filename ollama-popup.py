@@ -1,3 +1,4 @@
+#!/usr/bin/env -S python3
 # Credit: https://old.reddit.com/r/LocalLLaMA/comments/1aim70j/embed_ollama_in_mac/
 
 import json
