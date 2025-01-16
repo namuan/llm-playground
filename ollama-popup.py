@@ -107,7 +107,7 @@ def create_popup():
             clipboard_content = "No text found in clipboard"
             print(f"Clipboard error: {e}")
 
-        selected_mode = model_var.get()
+        selected_mode = chat_mode_var.get()
         context = f"""
         {selected_mode}
         {clipboard_content}
@@ -132,23 +132,16 @@ def create_popup():
 
     # Add mode selection dropdown
     chat_modes = get_chat_mode()
-    model_var = tk.StringVar(value=chat_modes[0])
+    chat_mode_var = tk.StringVar(value=chat_modes[0])
     chat_modes_dropdown = ttk.Combobox(
         button_frame,
-        textvariable=model_var,
+        textvariable=chat_mode_var,
         values=chat_modes,
         state="readonly",
         width=15,
     )
     chat_modes_dropdown.pack(side="right", padx=(0, 5))
-
-    # Add regenerate button
-    regenerate_button = tk.Button(
-        button_frame,
-        text="Regenerate",
-        command=regenerate_response,
-    )
-    regenerate_button.pack(side="right", padx=(0, 5))
+    chat_modes_dropdown.bind("<<ComboboxSelected>>", lambda e: regenerate_response())
 
     def update_message(message):
         current_text = label.cget("text")
@@ -199,7 +192,7 @@ def create_popup():
         print(f"Clipboard error: {e}")
 
     update_message("")
-    selected_mode = model_var.get()
+    selected_mode = chat_mode_var.get()
     context = f"""
     {selected_mode}
     {clipboard_content}
