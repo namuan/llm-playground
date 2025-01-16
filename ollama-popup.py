@@ -21,7 +21,7 @@ except ImportError:
 
 def make_api_call(text, update_callback):
     url = "http://localhost:11434/api/generate"
-    payload = {"model": "llama3.2:latest", "prompt": text, "stream": True}
+    payload = {"model": "llama3.2:latest", "prompt": text}
     headers = {"Content-Type": "application/json"}
     try:
         with requests.post(url, json=payload, headers=headers, stream=True) as response:
