@@ -21,8 +21,8 @@ except ImportError:
 
 def get_chat_modes():
     return {
-        "Explain": "Can you explain the following:",
         "Summarise": "Provide summary in bullet points for the following text:",
+        "Explain": "Can you explain the following:",
         "Proofread": "Trim the fat and make this more concise. Also review my text for any grammar or spelling mistakes:",
     }
 
