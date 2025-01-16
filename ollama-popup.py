@@ -19,6 +19,10 @@ except ImportError:
     print("For better clipboard handling, install pyperclip: pip install pyperclip")
 
 
+def get_chat_mode():
+    return ["Explain", "Summarise", "Proofread"]
+
+
 def make_api_call(text, update_callback):
     url = "http://localhost:11434/api/generate"
     payload = {"model": "llama3.2:latest", "prompt": text}
@@ -92,6 +96,26 @@ def create_popup():
         popup.destroy()
         root.destroy()
 
+    def regenerate_response():
+        label.config(text="")
+        try:
+            if USE_PYPERCLIP:
+                clipboard_content = pyperclip.paste()
+            else:
+                clipboard_content = root.clipboard_get()
+        except Exception as e:
+            clipboard_content = "No text found in clipboard"
+            print(f"Clipboard error: {e}")
+
+        selected_mode = model_var.get()
+        context = f"""
+        {selected_mode}
+        {clipboard_content}
+        """
+        threading.Thread(
+            target=make_api_call, args=(context, update_message), daemon=True
+        ).start()
+
     close_button = tk.Button(
         button_frame,
         text="Close",
@@ -105,6 +129,26 @@ def create_popup():
         command=copy_and_close,
     )
     copy_button.pack(side="right", padx=(0, 5))
+
+    # Add mode selection dropdown
+    chat_modes = get_chat_mode()
+    model_var = tk.StringVar(value=chat_modes[0])
+    chat_modes_dropdown = ttk.Combobox(
+        button_frame,
+        textvariable=model_var,
+        values=chat_modes,
+        state="readonly",
+        width=15,
+    )
+    chat_modes_dropdown.pack(side="right", padx=(0, 5))
+
+    # Add regenerate button
+    regenerate_button = tk.Button(
+        button_frame,
+        text="Regenerate",
+        command=regenerate_response,
+    )
+    regenerate_button.pack(side="right", padx=(0, 5))
 
     def update_message(message):
         current_text = label.cget("text")
@@ -155,8 +199,13 @@ def create_popup():
         print(f"Clipboard error: {e}")
 
     update_message("")
+    selected_mode = model_var.get()
+    context = f"""
+    {selected_mode}
+    {clipboard_content}
+    """
     threading.Thread(
-        target=make_api_call, args=(clipboard_content, update_message), daemon=True
+        target=make_api_call, args=(context, update_message), daemon=True
     ).start()
 
     root.mainloop()
