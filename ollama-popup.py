@@ -22,7 +22,7 @@ except ImportError:
 def get_chat_modes():
     return {
         "Explain": "Can you explain the following:",
-        "Summarise": "Provide summary for the following text:",
+        "Summarise": "Provide summary in bullet points for the following text:",
         "Proofread": "Trim the fat and make this more concise. Also review my text for any grammar or spelling mistakes:",
     }
 
@@ -46,6 +46,8 @@ def make_api_call(text, update_callback):
 
 
 def create_popup():
+    clipboard_content = None
+
     root = tk.Tk()
     root.withdraw()
 
@@ -102,15 +104,6 @@ def create_popup():
 
     def regenerate_response():
         label.config(text="")
-        try:
-            if USE_PYPERCLIP:
-                clipboard_content = pyperclip.paste()
-            else:
-                clipboard_content = root.clipboard_get()
-        except Exception as e:
-            clipboard_content = "No text found in clipboard"
-            print(f"Clipboard error: {e}")
-
         selected_mode = chat_mode_var.get()
         context = f"""{get_chat_modes()[selected_mode]}
         {clipboard_content}
