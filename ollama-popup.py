@@ -1,14 +1,18 @@
 #!/usr/bin/env -S python3
 # Credit: https://old.reddit.com/r/LocalLLaMA/comments/1aim70j/embed_ollama_in_mac/
 
+import asyncio
 import json
 import platform
 import threading
 import time
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 
 import requests
+import sounddevice as sd
+from kokoro_onnx import Kokoro
 
 try:
     import pyperclip
@@ -27,10 +31,31 @@ def get_chat_modes():
     }
 
 
+async def start_speaking(text):
+    model_path = Path.home() / "models/onnx/kokoro/kokoro-v0_19.onnx"
+    voices_path = Path.home() / "models/onnx/kokoro/voices.json"
+    kokoro = Kokoro(
+        model_path=model_path.as_posix(), voices_path=voices_path.as_posix()
+    )
+    stream = kokoro.create_stream(
+        text,
+        voice="am_michael",
+        speed=1.0,
+        lang="en-us",
+    )
+    count = 0
+    async for samples, sample_rate in stream:
+        count += 1
+        print(f"Playing audio stream ({count})...")
+        sd.play(samples, sample_rate)
+        sd.wait()
+
+
 def make_api_call(text, update_callback):
     url = "http://localhost:11434/api/generate"
     payload = {"model": "llama3.2:latest", "prompt": text}
     headers = {"Content-Type": "application/json"}
+    complete_response = ""
     try:
         with requests.post(url, json=payload, headers=headers, stream=True) as response:
             response.raise_for_status()
@@ -38,9 +63,12 @@ def make_api_call(text, update_callback):
                 if line:
                     decoded_line = line.decode("utf-8")
                     data = json.loads(decoded_line)
-                    update_callback(data.get("response", ""))
+                    response_chunk = data.get("response", "")
+                    update_callback(response_chunk)
+                    complete_response = complete_response + response_chunk
                     if data.get("done", False):
                         break
+        asyncio.run(start_speaking(complete_response))
     except requests.exceptions.RequestException as e:
         print(f"API request failed: {e}")
 
