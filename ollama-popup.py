@@ -19,8 +19,12 @@ except ImportError:
     print("For better clipboard handling, install pyperclip: pip install pyperclip")
 
 
-def get_chat_mode():
-    return ["Explain", "Summarise", "Proofread"]
+def get_chat_modes():
+    return {
+        "Explain": "Can you explain the following:",
+        "Summarise": "Provide summary for the following text:",
+        "Proofread": "Trim the fat and make this more concise. Also review my text for any grammar or spelling mistakes:",
+    }
 
 
 def make_api_call(text, update_callback):
@@ -108,8 +112,7 @@ def create_popup():
             print(f"Clipboard error: {e}")
 
         selected_mode = chat_mode_var.get()
-        context = f"""
-        {selected_mode}
+        context = f"""{get_chat_modes()[selected_mode]}
         {clipboard_content}
         """
         threading.Thread(
@@ -131,12 +134,12 @@ def create_popup():
     copy_button.pack(side="right", padx=(0, 5))
 
     # Add mode selection dropdown
-    chat_modes = get_chat_mode()
-    chat_mode_var = tk.StringVar(value=chat_modes[0])
+    chat_modes = get_chat_modes()
+    chat_mode_var = tk.StringVar(value=list(chat_modes.keys())[0])
     chat_modes_dropdown = ttk.Combobox(
         button_frame,
         textvariable=chat_mode_var,
-        values=chat_modes,
+        values=list(chat_modes.keys()),
         state="readonly",
         width=15,
     )
@@ -193,8 +196,7 @@ def create_popup():
 
     update_message("")
     selected_mode = chat_mode_var.get()
-    context = f"""
-    {selected_mode}
+    context = f"""{get_chat_modes()[selected_mode]}
     {clipboard_content}
     """
     threading.Thread(
