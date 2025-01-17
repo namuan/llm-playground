@@ -81,12 +81,22 @@ def create_popup():
 
     popup = tk.Toplevel(root)
     popup.overrideredirect(True)
-    popup.config(bg="white")
+    popup.config(bg="#FF8C00")
 
-    button_frame = tk.Frame(popup)
+    outer_glow = tk.Frame(popup, bg="#FFA500", padx=3, pady=3)
+    outer_glow.pack(fill="both", expand=True)
+
+    inner_glow = tk.Frame(outer_glow, bg="#FFB84D", padx=2, pady=2)
+    inner_glow.pack(fill="both", expand=True)
+
+    # Main content area
+    main_frame = tk.Frame(inner_glow, bg="white")
+    main_frame.pack(fill="both", expand=True)
+
+    button_frame = tk.Frame(main_frame)
     button_frame.pack(side="top", fill="x", padx=10, pady=5)
 
-    content_frame = tk.Frame(popup, bg="white")
+    content_frame = tk.Frame(main_frame, bg="white")
     content_frame.pack(side="top", fill="both", expand=True, padx=10, pady=(0, 10))
 
     canvas = tk.Canvas(content_frame, bg="white", highlightthickness=0)
