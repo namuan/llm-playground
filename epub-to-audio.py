@@ -154,11 +154,38 @@ def parse_args():
     return parser.parse_args()
 
 
+def create_text_chunks(text, chunk_size=2000):
+    """Split text into chunks of specified size, preserving sentence boundaries."""
+    chunks = []
+    current_chunk = []
+    current_length = 0
+
+    sentences = text.replace(". ", ".|").split("|")
+
+    for sentence in sentences:
+        if not sentence.strip():
+            continue
+
+        if current_length + len(sentence) > chunk_size and current_chunk:
+            chunks.append(" ".join(current_chunk))
+            current_chunk = []
+            current_length = 0
+
+        current_chunk.append(sentence)
+        current_length += len(sentence)
+
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+
+    return chunks
+
+
 def format_chapter_content(chapter):
-    """Format a chapter's content into a string."""
+    """Format a chapter's content into a string with character-limited chunks."""
     lines = [f"\nChapter: {chapter['chapter_id']} ({chapter['file_name']})"]
-    for item in chapter["content"]:
-        lines.append(f"{item['type']}: {item['text']}")
+    chapter_contents = " ".join([item["text"] for item in chapter["content"]])
+    chunks = create_text_chunks(chapter_contents, chunk_size=5000)
+    lines.extend(chunks)
     return "\n".join(lines)
 
 
@@ -175,7 +202,7 @@ def main(args):
     except FileNotFoundError:
         logging.error(f"Could not find the book at {args.book_path}")
     except Exception as e:
-        logging.error(f"Error processing the book: {str(e)}")
+        logging.error(f"Error processing the book: {str(e)}", exc_info=True)
 
 
 if __name__ == "__main__":
