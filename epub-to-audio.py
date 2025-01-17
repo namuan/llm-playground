@@ -44,30 +44,35 @@ from logger import setup_logging
 warnings.filterwarnings("ignore")
 
 TRANSCRIPT_WRITER_SYSTEM_PROMPT = """
-You are the a world-class podcast writer, you have worked as a ghost writer.
-
+You are the a world-class story teller and you have worked as a ghost writer.
 Welcome the listeners with a by talking about the Chapter Title.
+You will be talking to a guest.
 
 Do not address other speaker as Speaker 1 or Speaker 2.
 
-Remember Speaker 2 is new to the topic and the conversation should always have realistic anecdotes and analogies sprinkled throughout. The questions should have real world example follow ups etc
+Instructions for Speaker 1:
 
 Speaker 1: Leads the conversation and teaches the speaker 2, gives incredible anecdotes and analogies when explaining. Is a captivating teacher that gives great anecdotes
+Speaker 1: Do not address other speaker as Speaker 2
+Remember Speaker 2 is new to the topic and the conversation should always have realistic anecdotes and analogies sprinkled throughout. The questions should have real world example follow ups etc
+
+Instructions for Speaker 2:
 
 Speaker 2: Keeps the conversation on track by asking follow up questions. Gets super excited or confused when asking questions. Is a curious mindset that asks very interesting confirmation questions
+Speaker 2: Do not address other speaker as Speaker 1
+Make sure the tangents provides are quite wild or interesting.
 
-Make sure the tangents speaker 2 provides are quite wild or interesting.
 
-It should be a real podcast with every fine nuance documented in as much detail as possible.
+Must follow instructions for both speakers:
 
 ALWAYS START YOUR RESPONSE DIRECTLY WITH SPEAKER 1
 IT SHOULD STRICTLY BE THE DIALOGUES
 """
 
 TRANSCRIPT_REWRITER_SYSTEM_PROMPT = """
-You are an international oscar winning screenwriter and You have been working with multiple award winning podcast teams.
+You are an international oscar winning screenwriter and You have been working with multiple award winning teams.
 
-Your job is to use the podcast transcript written below to re-write it for an AI Text-To-Speech Pipeline.
+Your job is to use the story transcript written below to re-write it for an AI Text-To-Speech Pipeline.
 
 A very dumb AI had written this so you have to step up for your kind.
 
@@ -85,7 +90,7 @@ Ensure there are interruptions during explanations or there are "hmm" and "umm" 
 
 REMEMBER THIS WITH YOUR HEART
 
-It should be a real podcast with every fine nuance documented in as much detail as possible.
+It should be a real story with every fine nuance documented in as much detail as possible.
 
 Please re-write to make it as characteristic as possible
 
@@ -346,6 +351,8 @@ def generate_podcast(second_pass_file_path: Path, output_dir: Path):
     if output_dir.exists():
         return
 
+    output_dir.mkdir(exist_ok=True)
+
     with second_pass_file_path.open("rb") as file:
         podcast_text = pickle.load(file)
 
@@ -364,9 +371,11 @@ def generate_podcast(second_pass_file_path: Path, output_dir: Path):
         i += 1
 
 
-def combine_audio_files(audio_files: list[Path], output_directory: Path) -> Path:
+def combine_audio_files(
+    audio_files: list[Path], output_directory: Path, overwrite=False
+) -> Path:
     final_audio_path = output_directory.joinpath("_podcast.wav")
-    if final_audio_path.exists():
+    if final_audio_path.exists() and not overwrite:
         return final_audio_path
 
     audio_data = []
@@ -438,7 +447,6 @@ def main(args):
 
             # Generate audio segments
             segments_output_dir = chapter_directory / "segments"
-            segments_output_dir.mkdir(exist_ok=True)
             generate_podcast(second_pass_file, segments_output_dir)
             chapter_audio_file = combine_audio(segments_output_dir)
             logging.info(f"Chapter {idx} generated at {chapter_audio_file}")
@@ -448,7 +456,7 @@ def main(args):
             logging.info(
                 f"Combining audio files from {len(chapter_audio_files)} chapters"
             )
-            combine_audio_files(chapter_audio_files, OUTPUT_DIR)
+            combine_audio_files(chapter_audio_files, OUTPUT_DIR, overwrite=True)
 
     except FileNotFoundError:
         logging.error(f"Could not find the book at {args.book_path}")
