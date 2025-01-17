@@ -37,7 +37,6 @@ from ebooklib import epub
 from kokoro_onnx import Kokoro
 from mlx_lm import generate, load
 from more_itertools import partition
-from tqdm import tqdm
 
 from logger import setup_logging
 
@@ -115,6 +114,9 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 MODEL_VOICES_PATH = Path.home() / "models/onnx/kokoro/voices.json"
 MODEL_PATH = Path.home() / "models/onnx/kokoro/kokoro-v0_19.onnx"
 kokoro = None  # Lazy init
+
+KOKORO_SPEAKER_1 = "bm_george"
+KOKORO_SPEAKER_2 = "af_sarah"
 
 
 class EpubParser:
@@ -358,17 +360,12 @@ def generate_podcast(second_pass_file_path: Path, output_dir: Path):
 
     podcast = ast.literal_eval(podcast_text)
 
-    i = 1
-
-    for speaker, text in tqdm(
-        podcast, desc="Generating podcast segments", unit="segment"
-    ):
+    for i, (speaker, text) in enumerate(podcast):
         output_path = output_dir.joinpath(f"_podcast_segment_{i:02}.wav")
         if speaker == "Speaker 1":
-            generate_audio("af_bella", text, output_path)
+            generate_audio(KOKORO_SPEAKER_1, text, output_path)
         else:  # Speaker 2
-            generate_audio("am_michael", text, output_path)
-        i += 1
+            generate_audio(KOKORO_SPEAKER_2, text, output_path)
 
 
 def combine_audio_files(
