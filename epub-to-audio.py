@@ -38,10 +38,7 @@ class EpubParser:
             "Body": {"name": "p", "class_": "Body"},
             "LevelA": {"name": "h3", "class_": "LevelA"},
         }
-
-    def read_book(self):
         self.book = epub.read_epub(self.book_path)
-        return self.book
 
     def get_chapter_sequence(self):
         """Get the correct sequence of chapters from the book's spine."""
@@ -170,7 +167,6 @@ def main(args):
 
     try:
         parser = EpubParser(args.book_path)
-        parser.read_book()
         book_content = parser.process_book()
         formatted_content = "\n".join(
             format_chapter_content(chapter) for chapter in book_content
