@@ -182,8 +182,17 @@ def create_text_chunks(text, chunk_size=2000):
 
 def format_chapter_content(chapter):
     """Format a chapter's content into a string with character-limited chunks."""
-    lines = [f"\nChapter: {chapter['chapter_id']} ({chapter['file_name']})"]
-    chapter_contents = " ".join([item["text"] for item in chapter["content"]])
+    lines = [f"\nChapter Metadata: {chapter['chapter_id']} ({chapter['file_name']})"]
+    chapter_title = next(
+        (item["text"] for item in chapter["content"] if item["type"] == "ChapTitle"),
+        None,
+    )
+    if chapter_title:
+        lines.append(f"Chapter Title: {chapter_title}")
+
+    chapter_contents = " ".join(
+        [item["text"] for item in chapter["content"] if item["type"] != "ChapTitle"]
+    )
     chunks = create_text_chunks(chapter_contents, chunk_size=5000)
     lines.extend(chunks)
     return "\n".join(lines)
