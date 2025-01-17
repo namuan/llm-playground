@@ -101,6 +101,7 @@ def create_popup():
         anchor="nw",
         justify="left",
         wraplength=660,
+        font=("Fantasque Sans Mono", 18),
     )
     label.pack(fill="both", expand=True)
 
