@@ -1,10 +1,10 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # dependencies = [
-#     "beautifulsoup4==4.12.3",
-#     "ebooklib==0.18",
-#     "marimo==0.10.13",
-#     "lxml==5.1.0"
+#   "beautifulsoup4",
+#   "ebooklib",
+#   "lxml",
+#   "more-itertools"
 # ]
 # ///
 """
@@ -24,6 +24,7 @@ from pathlib import Path
 import ebooklib
 from bs4 import BeautifulSoup
 from ebooklib import epub
+from more_itertools import partition
 
 from logger import setup_logging
 
@@ -183,16 +184,16 @@ def create_text_chunks(text, chunk_size=2000):
 def format_chapter_content(chapter):
     """Format a chapter's content into a string with character-limited chunks."""
     lines = [f"\nChapter Metadata: {chapter['chapter_id']} ({chapter['file_name']})"]
-    chapter_title = next(
-        (item["text"] for item in chapter["content"] if item["type"] == "ChapTitle"),
-        None,
-    )
-    if chapter_title:
-        lines.append(f"Chapter Title: {chapter_title}")
 
-    chapter_contents = " ".join(
-        [item["text"] for item in chapter["content"] if item["type"] != "ChapTitle"]
+    body_items, title_items = partition(
+        lambda x: x["type"] == "ChapTitle", chapter["content"]
     )
+
+    title_list = list(title_items)
+    if title_list:
+        lines.append(f"Chapter Title: {title_list[0]['text']}")
+
+    chapter_contents = " ".join(item["text"] for item in body_items)
     chunks = create_text_chunks(chapter_contents, chunk_size=5000)
     lines.extend(chunks)
     return "\n".join(lines)
