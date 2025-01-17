@@ -14,6 +14,35 @@ import requests
 import sounddevice as sd
 from kokoro_onnx import Kokoro
 
+
+# CONFIG -- start
+
+
+# Items in the drop-down. The keys appear in the drop-down and the values are sent in the prompt.
+def get_chat_modes():
+    return {
+        "Summarise": "Provide summary in bullet points for the following text:",
+        "Explain": "Can you explain the following:",
+        "Proofread": "Trim the fat and make this more concise. Also review my text for any grammar or spelling mistakes:",
+    }
+
+
+# Ollama configuration and model
+OLLAMA_ENDPOINT = "http://localhost:11434/api/generate"
+OLLAMA_SELECTED_MODEL = "llama3.2:latest"
+
+# Kokoro voice settings
+MODEL_VOICES_PATH = Path.home() / "models/onnx/kokoro/voices.json"
+MODEL_PATH = Path.home() / "models/onnx/kokoro/kokoro-v0_19.onnx"
+MODEL_VOICE_SPEED = 1.0
+MODEL_SELECTED_VOICE = "af_bella"
+
+# Display text
+TEXT_FONT = "Fantasque Sans Mono"
+TEXT_FONT_SIZE = 18
+
+# CONFIG -- end
+
 try:
     import pyperclip
 
@@ -21,14 +50,6 @@ try:
 except ImportError:
     USE_PYPERCLIP = False
     print("For better clipboard handling, install pyperclip: pip install pyperclip")
-
-
-def get_chat_modes():
-    return {
-        "Summarise": "Provide summary in bullet points for the following text:",
-        "Explain": "Can you explain the following:",
-        "Proofread": "Trim the fat and make this more concise. Also review my text for any grammar or spelling mistakes:",
-    }
 
 
 def create_popup():
@@ -81,7 +102,7 @@ def create_popup():
         anchor="nw",
         justify="left",
         wraplength=660,
-        font=("Fantasque Sans Mono", 18),
+        font=(TEXT_FONT, TEXT_FONT_SIZE),
     )
     label.pack(fill="both", expand=True)
 
@@ -100,15 +121,13 @@ def create_popup():
 
     async def start_speaking(text):
         nonlocal animation_running
-        model_path = Path.home() / "models/onnx/kokoro/kokoro-v0_19.onnx"
-        voices_path = Path.home() / "models/onnx/kokoro/voices.json"
         kokoro = Kokoro(
-            model_path=model_path.as_posix(), voices_path=voices_path.as_posix()
+            model_path=MODEL_PATH.as_posix(), voices_path=MODEL_VOICES_PATH.as_posix()
         )
         stream = kokoro.create_stream(
             text,
-            voice="am_michael",
-            speed=1.0,
+            voice=MODEL_SELECTED_VOICE,
+            speed=MODEL_VOICE_SPEED,
             lang="en-us",
         )
 
@@ -130,8 +149,8 @@ def create_popup():
         speaking_indicator.pack_forget()
 
     def make_api_call(text, update_callback):
-        url = "http://localhost:11434/api/generate"
-        payload = {"model": "llama3.2:latest", "prompt": text}
+        url = OLLAMA_ENDPOINT
+        payload = {"model": OLLAMA_SELECTED_MODEL, "prompt": text}
         headers = {"Content-Type": "application/json"}
         complete_response = ""
         try:
