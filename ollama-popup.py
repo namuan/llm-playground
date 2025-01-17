@@ -31,50 +31,9 @@ def get_chat_modes():
     }
 
 
-async def start_speaking(text):
-    model_path = Path.home() / "models/onnx/kokoro/kokoro-v0_19.onnx"
-    voices_path = Path.home() / "models/onnx/kokoro/voices.json"
-    kokoro = Kokoro(
-        model_path=model_path.as_posix(), voices_path=voices_path.as_posix()
-    )
-    stream = kokoro.create_stream(
-        text,
-        voice="am_michael",
-        speed=1.0,
-        lang="en-us",
-    )
-    count = 0
-    async for samples, sample_rate in stream:
-        count += 1
-        print(f"Playing audio stream ({count})...")
-        sd.play(samples, sample_rate)
-        sd.wait()
-
-
-def make_api_call(text, update_callback):
-    url = "http://localhost:11434/api/generate"
-    payload = {"model": "llama3.2:latest", "prompt": text}
-    headers = {"Content-Type": "application/json"}
-    complete_response = ""
-    try:
-        with requests.post(url, json=payload, headers=headers, stream=True) as response:
-            response.raise_for_status()
-            for line in response.iter_lines():
-                if line:
-                    decoded_line = line.decode("utf-8")
-                    data = json.loads(decoded_line)
-                    response_chunk = data.get("response", "")
-                    update_callback(response_chunk)
-                    complete_response = complete_response + response_chunk
-                    if data.get("done", False):
-                        break
-        asyncio.run(start_speaking(complete_response))
-    except requests.exceptions.RequestException as e:
-        print(f"API request failed: {e}")
-
-
 def create_popup():
     clipboard_content = None
+    animation_running = False
 
     root = tk.Tk()
     root.withdraw()
@@ -89,12 +48,23 @@ def create_popup():
     inner_glow = tk.Frame(outer_glow, bg="#FFB84D", padx=2, pady=2)
     inner_glow.pack(fill="both", expand=True)
 
-    # Main content area
     main_frame = tk.Frame(inner_glow, bg="white")
     main_frame.pack(fill="both", expand=True)
 
     button_frame = tk.Frame(main_frame)
     button_frame.pack(side="top", fill="x", padx=10, pady=5)
+
+    # Add speaking indicator
+    speaking_indicator = tk.Canvas(
+        button_frame,
+        width=20,
+        height=20,
+        bg=button_frame.cget("bg"),
+        highlightthickness=0,
+    )
+    indicator_circle = speaking_indicator.create_oval(
+        5, 5, 15, 15, fill="gray", outline=""
+    )
 
     content_frame = tk.Frame(main_frame, bg="white")
     content_frame.pack(side="top", fill="both", expand=True, padx=10, pady=(0, 10))
@@ -116,6 +86,71 @@ def create_popup():
     label.pack(fill="both", expand=True)
 
     canvas.create_window((0, 0), window=label_frame, anchor="nw")
+
+    def pulse_animation():
+        nonlocal animation_running
+        if not animation_running:
+            speaking_indicator.pack_forget()
+            return
+
+        current_color = speaking_indicator.itemcget(indicator_circle, "fill")
+        new_color = "#4CAF50" if current_color == "gray" else "gray"
+        speaking_indicator.itemconfig(indicator_circle, fill=new_color)
+        popup.after(500, pulse_animation)
+
+    async def start_speaking(text):
+        nonlocal animation_running
+        model_path = Path.home() / "models/onnx/kokoro/kokoro-v0_19.onnx"
+        voices_path = Path.home() / "models/onnx/kokoro/voices.json"
+        kokoro = Kokoro(
+            model_path=model_path.as_posix(), voices_path=voices_path.as_posix()
+        )
+        stream = kokoro.create_stream(
+            text,
+            voice="am_michael",
+            speed=1.0,
+            lang="en-us",
+        )
+
+        # Start animation
+        animation_running = True
+        speaking_indicator.pack(side="left", padx=5)
+        popup.after(0, pulse_animation)
+
+        count = 0
+        async for samples, sample_rate in stream:
+            count += 1
+            print(f"Playing audio stream ({count})...")
+            sd.play(samples, sample_rate)
+            sd.wait()
+
+        # Stop animation
+        animation_running = False
+        speaking_indicator.itemconfig(indicator_circle, fill="gray")
+        speaking_indicator.pack_forget()
+
+    def make_api_call(text, update_callback):
+        url = "http://localhost:11434/api/generate"
+        payload = {"model": "llama3.2:latest", "prompt": text}
+        headers = {"Content-Type": "application/json"}
+        complete_response = ""
+        try:
+            with requests.post(
+                url, json=payload, headers=headers, stream=True
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if line:
+                        decoded_line = line.decode("utf-8")
+                        data = json.loads(decoded_line)
+                        response_chunk = data.get("response", "")
+                        update_callback(response_chunk)
+                        complete_response = complete_response + response_chunk
+                        if data.get("done", False):
+                            break
+            asyncio.run(start_speaking(complete_response))
+        except requests.exceptions.RequestException as e:
+            print(f"API request failed: {e}")
 
     def copy_and_close():
         text_to_copy = label.cget("text")
@@ -140,43 +175,6 @@ def create_popup():
     def close_popup():
         popup.destroy()
         root.destroy()
-
-    def regenerate_response():
-        label.config(text="")
-        selected_mode = chat_mode_var.get()
-        context = f"""{get_chat_modes()[selected_mode]}
-        {clipboard_content}
-        """
-        threading.Thread(
-            target=make_api_call, args=(context, update_message), daemon=True
-        ).start()
-
-    close_button = tk.Button(
-        button_frame,
-        text="Close",
-        command=close_popup,
-    )
-    close_button.pack(side="right", padx=(0, 5))
-
-    copy_button = tk.Button(
-        button_frame,
-        text="Copy Text",
-        command=copy_and_close,
-    )
-    copy_button.pack(side="right", padx=(0, 5))
-
-    # Add mode selection dropdown
-    chat_modes = get_chat_modes()
-    chat_mode_var = tk.StringVar(value=list(chat_modes.keys())[0])
-    chat_modes_dropdown = ttk.Combobox(
-        button_frame,
-        textvariable=chat_mode_var,
-        values=list(chat_modes.keys()),
-        state="readonly",
-        width=15,
-    )
-    chat_modes_dropdown.pack(side="right", padx=(0, 5))
-    chat_modes_dropdown.bind("<<ComboboxSelected>>", lambda e: regenerate_response())
 
     def update_message(message):
         current_text = label.cget("text")
@@ -206,6 +204,42 @@ def create_popup():
         canvas.configure(height=max_height - button_frame.winfo_reqheight() - 30)
         canvas.configure(yscrollcommand=scrollbar.set)
         popup.lift()
+
+    def regenerate_response():
+        label.config(text="")
+        selected_mode = chat_mode_var.get()
+        context = f"""{get_chat_modes()[selected_mode]}
+        {clipboard_content}
+        """
+        threading.Thread(
+            target=make_api_call, args=(context, update_message), daemon=True
+        ).start()
+
+    close_button = tk.Button(
+        button_frame,
+        text="Close",
+        command=close_popup,
+    )
+    close_button.pack(side="right", padx=(0, 0))
+
+    copy_button = tk.Button(
+        button_frame,
+        text="Copy Text",
+        command=copy_and_close,
+    )
+    copy_button.pack(side="right", padx=(0, 0))
+
+    chat_modes = get_chat_modes()
+    chat_mode_var = tk.StringVar(value=list(chat_modes.keys())[0])
+    chat_modes_dropdown = ttk.Combobox(
+        button_frame,
+        textvariable=chat_mode_var,
+        values=list(chat_modes.keys()),
+        state="readonly",
+        width=15,
+    )
+    chat_modes_dropdown.pack(side="right", padx=(0, 5))
+    chat_modes_dropdown.bind("<<ComboboxSelected>>", lambda e: regenerate_response())
 
     def on_scroll(event):
         if platform.system() == "Darwin":
