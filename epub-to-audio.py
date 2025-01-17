@@ -46,11 +46,9 @@ warnings.filterwarnings("ignore")
 TRANSCRIPT_WRITER_SYSTEM_PROMPT = """
 You are the a world-class podcast writer, you have worked as a ghost writer.
 
-We are in an alternate universe where actually you have been writing every line they say and they just stream it into their brains.
+Welcome the listeners with a by talking about the Chapter Title.
 
-You have won multiple podcast awards for your writing.
-
-Your job is to write word by word, even "umm, hmmm, right" interruptions by the second speaker based on the PDF upload. Keep it extremely engaging, the speakers can get derailed now and then but should discuss the topic.
+Do not address other speaker as Speaker 1 or Speaker 2.
 
 Remember Speaker 2 is new to the topic and the conversation should always have realistic anecdotes and analogies sprinkled throughout. The questions should have real world example follow ups etc
 
@@ -60,22 +58,18 @@ Speaker 2: Keeps the conversation on track by asking follow up questions. Gets s
 
 Make sure the tangents speaker 2 provides are quite wild or interesting.
 
-Ensure there are interruptions during explanations or there are "hmm" and "umm" injected throughout from the second speaker.
+It should be a real podcast with every fine nuance documented in as much detail as possible.
 
-It should be a real podcast with every fine nuance documented in as much detail as possible. Welcome the listeners with a super fun overview and keep it really catchy and almost borderline click bait
-
-ALWAYS START YOUR RESPONSE DIRECTLY WITH SPEAKER 1:
-DO NOT GIVE EPISODE TITLES SEPARATELY, LET SPEAKER 1 TITLE IT IN HER SPEECH
-DO NOT GIVE CHAPTER TITLES
+ALWAYS START YOUR RESPONSE DIRECTLY WITH SPEAKER 1
 IT SHOULD STRICTLY BE THE DIALOGUES
 """
 
 TRANSCRIPT_REWRITER_SYSTEM_PROMPT = """
-You are an international oscar winning screenwriter
+You are an international oscar winning screenwriter and You have been working with multiple award winning podcast teams.
 
-You have been working with multiple award winning podcast teams.
+Your job is to use the podcast transcript written below to re-write it for an AI Text-To-Speech Pipeline.
 
-Your job is to use the podcast transcript written below to re-write it for an AI Text-To-Speech Pipeline. A very dumb AI had written this so you have to step up for your kind.
+A very dumb AI had written this so you have to step up for your kind.
 
 Make it as engaging as possible, Speaker 1 and 2 will be simulated by different voice engines
 
@@ -90,11 +84,8 @@ Make sure the tangents speaker 2 provides are quite wild or interesting.
 Ensure there are interruptions during explanations or there are "hmm" and "umm" injected throughout from the Speaker 2.
 
 REMEMBER THIS WITH YOUR HEART
-The TTS Engine for Speaker 1 cannot do "umms, hmms" well so keep it straight text
 
-For Speaker 2 use "umm, hmm" as much, you can also use [sigh] and [laughs]. BUT ONLY THESE OPTIONS FOR EXPRESSIONS
-
-It should be a real podcast with every fine nuance documented in as much detail as possible. Welcome the listeners with a super fun overview and keep it really catchy and almost borderline click bait
+It should be a real podcast with every fine nuance documented in as much detail as possible.
 
 Please re-write to make it as characteristic as possible
 
@@ -106,12 +97,19 @@ IT WILL START DIRECTLY WITH THE LIST AND END WITH THE LIST NOTHING ELSE
 
 Example of response:
 [
-    ("Speaker 1", "Welcome to our podcast, where we explore the latest advancements in AI and technology. I'm your host, and today we're joined by a renowned expert in the field of AI. We're going to dive into the exciting world of Llama 3.2, the latest release from Meta AI."),
+    ("Speaker 1", "Let's explore the latest advancements in AI and technology. I'm your host, and today we're joined by a renowned expert in the field of AI. We're going to dive into the exciting world of Llama 3.2, the latest release from Meta AI."),
     ("Speaker 2", "Hi, I'm excited to be here! So, what is Llama 3.2?"),
     ("Speaker 1", "Ah, great question! Llama 3.2 is an open-source AI model that allows developers to fine-tune, distill, and deploy AI models anywhere. It's a significant update from the previous version, with improved performance, efficiency, and customization options."),
     ("Speaker 2", "That sounds amazing! What are some of the key features of Llama 3.2?")
 ]
 """
+
+OUTPUT_DIR = Path.cwd() / "target" / "epub_pods"
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+MODEL_VOICES_PATH = Path.home() / "models/onnx/kokoro/voices.json"
+MODEL_PATH = Path.home() / "models/onnx/kokoro/kokoro-v0_19.onnx"
+kokoro = None  # Lazy init
 
 
 class EpubParser:
@@ -267,7 +265,6 @@ def create_text_chunks(text, chunk_size=2000):
 
 
 def format_chapter_content(chapter):
-    """Format a chapter's content into a string with character-limited chunks."""
     lines = [f"\nChapter Metadata: {chapter['chapter_id']} ({chapter['file_name']})"]
 
     body_items, title_items = partition(
@@ -281,14 +278,10 @@ def format_chapter_content(chapter):
     chapter_contents = " ".join(item["text"] for item in body_items)
     chunks = create_text_chunks(chapter_contents, chunk_size=5000)
     lines.extend(chunks)
-    return "\n".join(lines)
+    return len(lines), "\n".join(lines)
 
 
 def transcript_writer(formatted_content):
-    transcript_initial_pass_file_path = Path.cwd() / "target" / "data.pkl"
-    if transcript_initial_pass_file_path.exists():
-        return transcript_initial_pass_file_path
-
     model, tokenizer = load("mlx-community/Qwen2.5-14B-Instruct-4bit")
     messages = [
         {"role": "system", "content": TRANSCRIPT_WRITER_SYSTEM_PROMPT},
@@ -303,21 +296,10 @@ def transcript_writer(formatted_content):
         prompt=prompt,
         max_tokens=8126,
     )
-    logging.info(
-        f"Writing {outputs[0]} ... to {transcript_initial_pass_file_path.as_posix()}"
-    )
-    logging.debug(f"Output from transcript writer: {outputs}")
-    with transcript_initial_pass_file_path.open("wb") as file:
-        pickle.dump(outputs, file)
-
-    return transcript_initial_pass_file_path
+    return outputs
 
 
 def transcript_rewriter(initial_pass: Path):
-    transcript_second_pass_file_path = Path.cwd() / "target" / "podcast_ready_data.pkl"
-    if transcript_second_pass_file_path.exists():
-        return transcript_second_pass_file_path
-
     with initial_pass.open("rb") as f:
         first_pass = pickle.load(f)
     model, tokenizer = load("mlx-community/Qwen2.5-7B-Instruct-4bit")
@@ -334,15 +316,21 @@ def transcript_rewriter(initial_pass: Path):
         prompt=prompt,
         max_tokens=8126,
     )
-    logging.debug(f"Output from transcript re-writer: {outputs}")
-    with transcript_second_pass_file_path.open("wb") as file:
-        pickle.dump(outputs, file)
 
-    return transcript_second_pass_file_path
+    return outputs
 
 
-def generate_audio(kokoro: Kokoro, speaker, text, output_path):
-    samples, sample_rate = kokoro.create(
+def get_tts() -> Kokoro:
+    global kokoro
+    if not kokoro:
+        kokoro = Kokoro(
+            model_path=MODEL_PATH.as_posix(), voices_path=MODEL_VOICES_PATH.as_posix()
+        )
+    return kokoro
+
+
+def generate_audio(speaker, text, output_path):
+    samples, sample_rate = get_tts().create(
         text,
         voice=speaker,
         speed=1.0,
@@ -354,7 +342,10 @@ def generate_audio(kokoro: Kokoro, speaker, text, output_path):
     )
 
 
-def generate_podcast(second_pass_file_path: Path):
+def generate_podcast(second_pass_file_path: Path, output_dir: Path):
+    if output_dir.exists():
+        return
+
     with second_pass_file_path.open("rb") as file:
         podcast_text = pickle.load(file)
 
@@ -362,26 +353,31 @@ def generate_podcast(second_pass_file_path: Path):
 
     i = 1
 
-    MODEL_VOICES_PATH = Path.home() / "models/onnx/kokoro/voices.json"
-    MODEL_PATH = Path.home() / "models/onnx/kokoro/kokoro-v0_19.onnx"
-    kokoro = Kokoro(
-        model_path=MODEL_PATH.as_posix(), voices_path=MODEL_VOICES_PATH.as_posix()
-    )
-
-    output_dir = Path.cwd() / "target" / "segments"
-    output_dir.mkdir(exist_ok=True)
-
     for speaker, text in tqdm(
         podcast, desc="Generating podcast segments", unit="segment"
     ):
         output_path = output_dir.joinpath(f"_podcast_segment_{i:02}.wav")
         if speaker == "Speaker 1":
-            generate_audio(kokoro, "af_bella", text, output_path)
+            generate_audio("af_bella", text, output_path)
         else:  # Speaker 2
-            generate_audio(kokoro, "am_michael", text, output_path)
+            generate_audio("am_michael", text, output_path)
         i += 1
 
-    return output_dir
+
+def combine_audio_files(audio_files: list[Path], output_directory: Path) -> Path:
+    final_audio_path = output_directory.joinpath("_podcast.wav")
+    if final_audio_path.exists():
+        return final_audio_path
+
+    audio_data = []
+    for file in audio_files:
+        data, rate = sf.read(file)
+        audio_data.append(data)
+
+    audio_data = np.concatenate(audio_data)
+    sf.write(final_audio_path.as_posix(), audio_data, 24000)
+
+    return final_audio_path
 
 
 def combine_audio(segments_output_dir: Path):
@@ -393,13 +389,7 @@ def combine_audio(segments_output_dir: Path):
         ]
     )
 
-    audio_data = []
-    for file in audio_files:
-        data, rate = sf.read(file)
-        audio_data.append(data)
-
-    audio_data = np.concatenate(audio_data)
-    sf.write("./target/_podcast.wav", audio_data, 24000)
+    return combine_audio_files(audio_files, segments_output_dir.parent)
 
 
 def main(args):
@@ -408,13 +398,58 @@ def main(args):
     try:
         parser = EpubParser(args.book_path)
         book_content = parser.process_book()
-        formatted_content = "\n".join(
-            format_chapter_content(chapter) for chapter in book_content[:2]
-        )
-        initial_pass_file_path = transcript_writer(formatted_content)
-        second_pass_file_path = transcript_rewriter(initial_pass_file_path)
-        segments_output_dir = generate_podcast(second_pass_file_path)
-        combine_audio(segments_output_dir)
+        chapter_audio_files = []
+        for idx, chapter in enumerate(book_content[:3]):
+            number_of_lines, formatted_chapter = format_chapter_content(chapter)
+            logging.info(
+                f"🏁 Processing Chapter {idx}. Number of lines: {number_of_lines}"
+            )
+            if number_of_lines < 3:
+                logging.info(
+                    f"Skipping {chapter}. Not enough lines in the chapter. Lines found {number_of_lines}"
+                )
+                continue
+
+            chapter_directory = OUTPUT_DIR.joinpath(f"chapter-{idx}")
+            chapter_directory.mkdir(exist_ok=True)
+            chapter_directory.joinpath("formatted_chapter.txt").write_text(
+                formatted_chapter
+            )
+
+            # Initial Pass
+            initial_pass_file = chapter_directory.joinpath("initial_pass.pkl")
+            if not initial_pass_file.exists():
+                initial_pass_output = transcript_writer(formatted_chapter)
+                chapter_directory.joinpath("initial_pass.txt").write_text(
+                    initial_pass_output
+                )
+                with initial_pass_file.open("wb") as file:
+                    pickle.dump(initial_pass_output, file)
+
+            # Second Pass
+            second_pass_file = chapter_directory.joinpath("second_pass.pkl")
+            if not second_pass_file.exists():
+                second_pass_output = transcript_rewriter(initial_pass_file)
+                chapter_directory.joinpath("second_pass.txt").write_text(
+                    second_pass_output
+                )
+                with second_pass_file.open("wb") as file:
+                    pickle.dump(second_pass_output, file)
+
+            # Generate audio segments
+            segments_output_dir = chapter_directory / "segments"
+            segments_output_dir.mkdir(exist_ok=True)
+            generate_podcast(second_pass_file, segments_output_dir)
+            chapter_audio_file = combine_audio(segments_output_dir)
+            logging.info(f"Chapter {idx} generated at {chapter_audio_file}")
+            chapter_audio_files.append(chapter_audio_file)
+
+        if chapter_audio_files:
+            logging.info(
+                f"Combining audio files from {len(chapter_audio_files)} chapters"
+            )
+            combine_audio_files(chapter_audio_files, OUTPUT_DIR)
+
     except FileNotFoundError:
         logging.error(f"Could not find the book at {args.book_path}")
     except Exception as e:
