@@ -148,7 +148,6 @@ def create_popup():
                         complete_response = complete_response + response_chunk
                         if data.get("done", False):
                             break
-            asyncio.run(start_speaking(complete_response))
         except requests.exceptions.RequestException as e:
             print(f"API request failed: {e}")
 
@@ -215,6 +214,12 @@ def create_popup():
             target=make_api_call, args=(context, update_message), daemon=True
         ).start()
 
+    def speak_response():
+        text_to_speak = label.cget("text")
+        threading.Thread(
+            target=lambda: asyncio.run(start_speaking(text_to_speak)), daemon=True
+        ).start()
+
     close_button = tk.Button(
         button_frame,
         text="Close",
@@ -228,6 +233,13 @@ def create_popup():
         command=copy_and_close,
     )
     copy_button.pack(side="right", padx=(0, 0))
+
+    speak_button = tk.Button(
+        button_frame,
+        text="Speak",
+        command=speak_response,
+    )
+    speak_button.pack(side="right", padx=(0, 5))
 
     chat_modes = get_chat_modes()
     chat_mode_var = tk.StringVar(value=list(chat_modes.keys())[0])
