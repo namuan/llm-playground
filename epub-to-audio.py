@@ -246,6 +246,11 @@ def parse_args():
         dest="verbose",
         help="Increase verbosity of logging output",
     )
+    parser.add_argument(
+        "--text-only",
+        action="store_true",
+        help="Generate only formatted text for the EPUB file and exit",
+    )
     return parser.parse_args()
 
 
@@ -403,13 +408,11 @@ def combine_audio(segments_output_dir: Path):
 
 
 def process_chapters(book_content):
-    # Generate formatted text for all the chapters
-    chapter_directories = [
+    return [
         chapter_directory
         for idx, chapter, chapter_directory in get_chapters(book_content)
         if process_chapter(idx, chapter, chapter_directory)
     ]
-    return chapter_directories
 
 
 def process_chapter(idx, chapter, chapter_directory):
@@ -429,7 +432,7 @@ def process_chapter(idx, chapter, chapter_directory):
 
 
 def get_chapters(book_content):
-    for idx, chapter in enumerate(book_content[:2]):
+    for idx, chapter in enumerate(book_content):
         chapter_directory = OUTPUT_DIR.joinpath(f"chapter-{idx}")
         chapter_directory.mkdir(exist_ok=True)
         yield idx, chapter, chapter_directory
@@ -444,6 +447,12 @@ def main(args):
 
         # Generate formatted text for all the chapters
         chapter_directories = process_chapters(book_content)
+
+        if args.text_only:
+            logging.info(
+                "Formatted text generated. Exiting as --text-only flag is set."
+            )
+            return
 
         # Initial pass
         for chapter_directory in chapter_directories:
