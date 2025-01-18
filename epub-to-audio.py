@@ -40,6 +40,10 @@ from more_itertools import partition
 
 from logger import setup_logging
 
+SECOND_PASS_FILE_NAME = "second_pass.pkl"
+INITIAL_PASS_FILE_NAME = "initial_pass.pkl"
+FORMATTED_CHAPTER_FILE_NAME = "formatted_chapter.txt"
+
 warnings.filterwarnings("ignore")
 
 TRANSCRIPT_WRITER_SYSTEM_PROMPT = """
@@ -398,32 +402,56 @@ def combine_audio(segments_output_dir: Path):
     return combine_audio_files(audio_files, segments_output_dir.parent)
 
 
+def process_chapters(book_content):
+    # Generate formatted text for all the chapters
+    chapter_directories = [
+        chapter_directory
+        for idx, chapter, chapter_directory in get_chapters(book_content)
+        if process_chapter(idx, chapter, chapter_directory)
+    ]
+    return chapter_directories
+
+
+def process_chapter(idx, chapter, chapter_directory):
+    number_of_lines, formatted_chapter = format_chapter_content(chapter)
+    logging.info(f"🏁 Processing Chapter {idx}. Number of lines: {number_of_lines}")
+
+    if number_of_lines < 3:
+        logging.info(
+            f"Skipping {chapter}. Not enough lines in the chapter. Lines found: {number_of_lines}"
+        )
+        return False
+
+    # Write formatted chapter to file
+    output_file = chapter_directory / FORMATTED_CHAPTER_FILE_NAME
+    output_file.write_text(formatted_chapter)
+    return True
+
+
+def get_chapters(book_content):
+    for idx, chapter in enumerate(book_content[:2]):
+        chapter_directory = OUTPUT_DIR.joinpath(f"chapter-{idx}")
+        chapter_directory.mkdir(exist_ok=True)
+        yield idx, chapter, chapter_directory
+
+
 def main(args):
     logging.debug(f"Processing book: {args.book_path}")
 
     try:
         parser = EpubParser(args.book_path)
         book_content = parser.process_book()
-        chapter_audio_files = []
-        for idx, chapter in enumerate(book_content[:3]):
-            number_of_lines, formatted_chapter = format_chapter_content(chapter)
-            logging.info(
-                f"🏁 Processing Chapter {idx}. Number of lines: {number_of_lines}"
-            )
-            if number_of_lines < 3:
-                logging.info(
-                    f"Skipping {chapter}. Not enough lines in the chapter. Lines found {number_of_lines}"
-                )
-                continue
 
-            chapter_directory = OUTPUT_DIR.joinpath(f"chapter-{idx}")
-            chapter_directory.mkdir(exist_ok=True)
-            chapter_directory.joinpath("formatted_chapter.txt").write_text(
-                formatted_chapter
-            )
+        # Generate formatted text for all the chapters
+        chapter_directories = process_chapters(book_content)
 
+        # Initial pass
+        for chapter_directory in chapter_directories:
+            formatted_chapter = chapter_directory.joinpath(
+                FORMATTED_CHAPTER_FILE_NAME
+            ).read_text(encoding="utf-8")
             # Initial Pass
-            initial_pass_file = chapter_directory.joinpath("initial_pass.pkl")
+            initial_pass_file = chapter_directory.joinpath(INITIAL_PASS_FILE_NAME)
             if not initial_pass_file.exists():
                 initial_pass_output = transcript_writer(formatted_chapter)
                 chapter_directory.joinpath("initial_pass.txt").write_text(
@@ -432,8 +460,11 @@ def main(args):
                 with initial_pass_file.open("wb") as file:
                     pickle.dump(initial_pass_output, file)
 
+        # Second pass to generate speaker tags
+        for chapter_directory in chapter_directories:
+            initial_pass_file = chapter_directory.joinpath(INITIAL_PASS_FILE_NAME)
             # Second Pass
-            second_pass_file = chapter_directory.joinpath("second_pass.pkl")
+            second_pass_file = chapter_directory.joinpath(SECOND_PASS_FILE_NAME)
             if not second_pass_file.exists():
                 second_pass_output = transcript_rewriter(initial_pass_file)
                 chapter_directory.joinpath("second_pass.txt").write_text(
@@ -442,13 +473,20 @@ def main(args):
                 with second_pass_file.open("wb") as file:
                     pickle.dump(second_pass_output, file)
 
+        # Generate Audio
+        chapter_audio_files = []
+        for chapter_directory in chapter_directories:
+            second_pass_file = chapter_directory.joinpath(SECOND_PASS_FILE_NAME)
             # Generate audio segments
             segments_output_dir = chapter_directory / "segments"
             generate_podcast(second_pass_file, segments_output_dir)
             chapter_audio_file = combine_audio(segments_output_dir)
-            logging.info(f"Chapter {idx} generated at {chapter_audio_file}")
+            logging.info(
+                f"Chapter {chapter_directory.stem} audio generated in {chapter_audio_file}"
+            )
             chapter_audio_files.append(chapter_audio_file)
 
+        # Combine audio files for individual chapters into a single file
         if chapter_audio_files:
             logging.info(
                 f"Combining audio files from {len(chapter_audio_files)} chapters"
@@ -456,7 +494,7 @@ def main(args):
             combine_audio_files(chapter_audio_files, OUTPUT_DIR, overwrite=True)
 
     except FileNotFoundError:
-        logging.error(f"Could not find the book at {args.book_path}")
+        logging.error(f"Could not find the book at {args.book_path}", exc_info=True)
     except Exception as e:
         logging.error(f"Error processing the book: {str(e)}", exc_info=True)
 
