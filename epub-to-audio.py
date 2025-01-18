@@ -6,19 +6,29 @@
 #   "lxml",
 #   "more-itertools",
 #   "mlx_lm",
-#   "tqdm",
 #   "kokoro-onnx",
 #   "soundfile",
+#   "python-slugify",
 # ]
 # ///
 """
-EPUB text extraction script
+This script extracts text from an EPUB file, formats it, and converts it into an engaging audio podcast.
+It uses AI-based transcript generation, rewriting, and text-to-speech synthesis to create a conversational
+and captivating audio output.
 
 Usage:
-./epub-to-audio.py -h
+    ./epub-to-audio.py -h  # Display help information
 
-./epub-to-audio.py -v path/to/book.epub # To log INFO messages
-./epub-to-audio.py -vv path/to/book.epub # To log DEBUG messages
+    ./epub-to-audio.py [-v | -vv] [--chapters N] path/to/book.epub  # Process an EPUB file
+        -v: Log INFO messages
+        -vv: Log DEBUG messages
+        --chapters N: Process first N chapters (0 means all chapters)
+
+    ./epub-to-audio.py --text-only path/to/book.epub  # Extract and save formatted text only
+
+Outputs:
+- A fully formatted text file for the EPUB book.
+- Audio files for individual chapters and a combined podcast file.
 """
 import ast
 import logging
@@ -37,14 +47,34 @@ from ebooklib import epub
 from kokoro_onnx import Kokoro
 from mlx_lm import generate, load
 from more_itertools import partition
+from slugify import slugify
 
 from logger import setup_logging
+
+warnings.filterwarnings("ignore")
+
+### Config
+
+OUTPUT_DIR = Path.cwd() / "target" / "epub_pods"
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+MODEL_VOICES_PATH = Path.home() / "models/onnx/kokoro/voices.json"
+MODEL_PATH = Path.home() / "models/onnx/kokoro/kokoro-v0_19.onnx"
+kokoro = None  # Lazy init
+
+KOKORO_SPEAKER_1 = "bm_george"
+KOKORO_SPEAKER_2 = "af_sarah"
 
 SECOND_PASS_FILE_NAME = "second_pass.pkl"
 INITIAL_PASS_FILE_NAME = "initial_pass.pkl"
 FORMATTED_CHAPTER_FILE_NAME = "formatted_chapter.txt"
 
-warnings.filterwarnings("ignore")
+FIRST_PASS_LLM = "mlx-community/Qwen2.5-14B-Instruct-4bit"
+SECOND_PASS_LLM = "mlx-community/Qwen2.5-7B-Instruct-4bit"
+
+### CONFIG (END)
+
+### PROMPTS
 
 TRANSCRIPT_WRITER_SYSTEM_PROMPT = """
 You are the a world-class story teller and you have worked as a ghost writer.
@@ -112,15 +142,7 @@ Example of response:
 ]
 """
 
-OUTPUT_DIR = Path.cwd() / "target" / "epub_pods"
-OUTPUT_DIR.mkdir(exist_ok=True)
-
-MODEL_VOICES_PATH = Path.home() / "models/onnx/kokoro/voices.json"
-MODEL_PATH = Path.home() / "models/onnx/kokoro/kokoro-v0_19.onnx"
-kokoro = None  # Lazy init
-
-KOKORO_SPEAKER_1 = "bm_george"
-KOKORO_SPEAKER_2 = "af_sarah"
+### PROMPTS (END)
 
 
 class EpubParser:
@@ -251,6 +273,12 @@ def parse_args():
         action="store_true",
         help="Generate only formatted text for the EPUB file and exit",
     )
+    parser.add_argument(
+        "--chapters",
+        type=int,
+        default=0,
+        help="Number of chapters to process. Default 0 means process all chapters",
+    )
     return parser.parse_args()
 
 
@@ -302,7 +330,7 @@ def format_chapter_content(chapter):
 
 
 def transcript_writer(formatted_content):
-    model, tokenizer = load("mlx-community/Qwen2.5-14B-Instruct-4bit")
+    model, tokenizer = load(FIRST_PASS_LLM)
     messages = [
         {"role": "system", "content": TRANSCRIPT_WRITER_SYSTEM_PROMPT},
         {"role": "user", "content": formatted_content},
@@ -322,7 +350,7 @@ def transcript_writer(formatted_content):
 def transcript_rewriter(initial_pass: Path):
     with initial_pass.open("rb") as f:
         first_pass = pickle.load(f)
-    model, tokenizer = load("mlx-community/Qwen2.5-7B-Instruct-4bit")
+    model, tokenizer = load(SECOND_PASS_LLM)
     messages = [
         {"role": "system", "content": TRANSCRIPT_REWRITER_SYSTEM_PROMPT},
         {"role": "user", "content": first_pass},
@@ -411,10 +439,12 @@ def combine_audio(segments_output_dir: Path):
     return combine_audio_files(audio_files, segments_output_dir.parent)
 
 
-def process_chapters(book_content):
+def process_chapters(output_directory, book_content):
     return [
         chapter_directory
-        for idx, chapter, chapter_directory in get_chapters(book_content)
+        for idx, chapter, chapter_directory in get_chapters(
+            output_directory, book_content
+        )
         if process_chapter(idx, chapter, chapter_directory)
     ]
 
@@ -435,9 +465,9 @@ def process_chapter(idx, chapter, chapter_directory):
     return True
 
 
-def get_chapters(book_content):
+def get_chapters(output_directory, book_content):
     for idx, chapter in enumerate(book_content):
-        chapter_directory = OUTPUT_DIR.joinpath(f"chapter-{idx}")
+        chapter_directory = output_directory.joinpath(f"chapter-{idx}")
         chapter_directory.mkdir(exist_ok=True)
         yield idx, chapter, chapter_directory
 
@@ -449,14 +479,20 @@ def main(args):
         parser = EpubParser(args.book_path)
         book_content = parser.process_book()
 
-        # Generate formatted text for all the chapters
-        chapter_directories = process_chapters(book_content)
+        book_slug = slugify(args.book_path.stem)
+        output_directory = OUTPUT_DIR.joinpath(book_slug)
+        output_directory.mkdir(exist_ok=True)
+
+        selected_book_contents = (
+            book_content[: args.chapters] if args.chapters > 0 else book_content
+        )
+        chapter_directories = process_chapters(output_directory, selected_book_contents)
 
         if args.text_only:
             logging.info(
                 "Formatted text generated. Exiting as --text-only flag is set."
             )
-            formatted_text_path = OUTPUT_DIR / "formatted_book.txt"
+            formatted_text_path = output_directory / "formatted_book.txt"
             all_text = (
                 chapter_directory.joinpath(FORMATTED_CHAPTER_FILE_NAME).read_text(
                     encoding="utf-8"
