@@ -150,11 +150,6 @@ class EpubParser:
         self.book_path = book_path
         self.book = None
         self.chapters = OrderedDict()
-        self.target_elements = {
-            "ChapTitle": {"name": "span", "class_": "ChapTitle"},
-            "Body": {"name": "p", "class_": "Body"},
-            "LevelA": {"name": "h3", "class_": "LevelA"},
-        }
         self.book = epub.read_epub(self.book_path)
 
     def get_chapter_sequence(self):
@@ -209,24 +204,19 @@ class EpubParser:
 
         return self.chapters
 
+    def clean_text(self, text: str) -> list[str]:
+        lines = text.split("\n")
+        for line in lines:
+            yield line.strip()
+
     def parse_chapter(self, chapter_content):
         """Parse a single chapter's content."""
-        texts = []
         soup = BeautifulSoup(chapter_content, features="lxml")
-
-        for element in soup.body.descendants:
-            if element.name is None:
-                continue
-
-            for key, target in self.target_elements.items():
-                if element.name == target["name"] and target["class_"] in element.get(
-                    "class", []
-                ):
-                    text = element.get_text(strip=True)
-                    if text:  # Only append non-empty text
-                        texts.append({"type": key, "text": text})
-                    break
-
+        text = soup.get_text(separator=" ")
+        texts = []
+        for text in self.clean_text(text):
+            if text:
+                texts.append({"type": "Body", "text": text})
         return texts
 
     def process_book(self):
