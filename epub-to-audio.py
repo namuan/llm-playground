@@ -280,16 +280,20 @@ def create_text_chunks(text, chunk_size=2000):
     return chunks
 
 
-def format_chapter_content(chapter):
-    lines = [f"\nChapter Metadata: {chapter['chapter_id']} ({chapter['file_name']})"]
+def get_chapter_title(title_items):
+    title_list = list(title_items)
+    if title_list:
+        return f" - {title_list[0]['text']}"
+    else:
+        """"""
 
+
+def format_chapter_content(chapter):
     body_items, title_items = partition(
         lambda x: x["type"] == "ChapTitle", chapter["content"]
     )
 
-    title_list = list(title_items)
-    if title_list:
-        lines.append(f"Chapter Title: {title_list[0]['text']}")
+    lines = [f"\n{chapter['file_name']}{get_chapter_title(title_items)}"]
 
     chapter_contents = " ".join(item["text"] for item in body_items)
     chunks = create_text_chunks(chapter_contents, chunk_size=5000)
@@ -452,6 +456,19 @@ def main(args):
             logging.info(
                 "Formatted text generated. Exiting as --text-only flag is set."
             )
+            formatted_text_path = OUTPUT_DIR / "formatted_book.txt"
+            all_text = (
+                chapter_directory.joinpath(FORMATTED_CHAPTER_FILE_NAME).read_text(
+                    encoding="utf-8"
+                )
+                for chapter_directory in chapter_directories
+                if chapter_directory.joinpath(FORMATTED_CHAPTER_FILE_NAME).exists()
+            )
+            formatted_text_path.write_text(
+                "\n\n".join(all_text),
+                encoding="utf-8",
+            )
+            logging.info(f"Formatted book saved at {formatted_text_path}")
             return
 
         # Initial pass
