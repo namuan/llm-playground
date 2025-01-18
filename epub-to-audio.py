@@ -58,8 +58,8 @@ warnings.filterwarnings("ignore")
 OUTPUT_DIR = Path.cwd() / "target" / "epub_pods"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-MODEL_VOICES_PATH = Path.home() / "models/onnx/kokoro/voices.json"
-MODEL_PATH = Path.home() / "models/onnx/kokoro/kokoro-v0_19.onnx"
+KOKORO_MODEL_VOICES_PATH = Path.home() / "models/onnx/kokoro/voices.json"
+KOKORO_MODEL_PATH = Path.home() / "models/onnx/kokoro/kokoro-v0_19.onnx"
 kokoro = None  # Lazy init
 
 KOKORO_SPEAKER_1 = "bm_george"
@@ -372,7 +372,8 @@ def get_tts() -> Kokoro:
     global kokoro
     if not kokoro:
         kokoro = Kokoro(
-            model_path=MODEL_PATH.as_posix(), voices_path=MODEL_VOICES_PATH.as_posix()
+            model_path=KOKORO_MODEL_PATH.as_posix(),
+            voices_path=KOKORO_MODEL_VOICES_PATH.as_posix(),
         )
     return kokoro
 
@@ -410,9 +411,12 @@ def generate_podcast(second_pass_file_path: Path, output_dir: Path):
 
 
 def combine_audio_files(
-    audio_files: list[Path], output_directory: Path, overwrite=False
+    audio_files: list[Path],
+    output_directory: Path,
+    file_name="_podcast.wav",
+    overwrite=False,
 ) -> Path:
-    final_audio_path = output_directory.joinpath("_podcast.wav")
+    final_audio_path = output_directory.joinpath(file_name)
     if final_audio_path.exists() and not overwrite:
         return final_audio_path
 
@@ -488,23 +492,24 @@ def main(args):
         )
         chapter_directories = process_chapters(output_directory, selected_book_contents)
 
+        formatted_text_path = output_directory / f"{book_slug}.txt"
+        all_text = (
+            chapter_directory.joinpath(FORMATTED_CHAPTER_FILE_NAME).read_text(
+                encoding="utf-8"
+            )
+            for chapter_directory in chapter_directories
+            if chapter_directory.joinpath(FORMATTED_CHAPTER_FILE_NAME).exists()
+        )
+        formatted_text_path.write_text(
+            "\n\n".join(all_text),
+            encoding="utf-8",
+        )
+        logging.info(f"Formatted book saved at {formatted_text_path}")
+
         if args.text_only:
             logging.info(
                 "Formatted text generated. Exiting as --text-only flag is set."
             )
-            formatted_text_path = output_directory / "formatted_book.txt"
-            all_text = (
-                chapter_directory.joinpath(FORMATTED_CHAPTER_FILE_NAME).read_text(
-                    encoding="utf-8"
-                )
-                for chapter_directory in chapter_directories
-                if chapter_directory.joinpath(FORMATTED_CHAPTER_FILE_NAME).exists()
-            )
-            formatted_text_path.write_text(
-                "\n\n".join(all_text),
-                encoding="utf-8",
-            )
-            logging.info(f"Formatted book saved at {formatted_text_path}")
             return
 
         # Initial pass
@@ -553,7 +558,12 @@ def main(args):
             logging.info(
                 f"Combining audio files from {len(chapter_audio_files)} chapters"
             )
-            combine_audio_files(chapter_audio_files, OUTPUT_DIR, overwrite=True)
+            combine_audio_files(
+                chapter_audio_files,
+                output_directory,
+                f"{book_slug}.wav",
+                overwrite=True,
+            )
 
     except FileNotFoundError:
         logging.error(f"Could not find the book at {args.book_path}", exc_info=True)
