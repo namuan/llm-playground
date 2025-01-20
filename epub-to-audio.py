@@ -269,6 +269,13 @@ def parse_args():
         default=0,
         help="Number of chapters to process. Default 0 means process all chapters",
     )
+    # args.minimum_lines_in_chapter
+    parser.add_argument(
+        "--minimum-lines-in-chapter",
+        type=int,
+        default=0,
+        help="Minimum number of lines to include chapter. Default 0 means include all chapters",
+    )
     return parser.parse_args()
 
 
@@ -314,7 +321,7 @@ def format_chapter_content(chapter):
     lines = [f"\n{chapter['file_name']}{get_chapter_title(title_items)}"]
 
     chapter_contents = " ".join(item["text"] for item in body_items)
-    chunks = create_text_chunks(chapter_contents, chunk_size=5000)
+    chunks = create_text_chunks(chapter_contents, chunk_size=1000)
     lines.extend(chunks)
     return len(lines), "\n".join(lines)
 
@@ -433,21 +440,21 @@ def combine_audio(segments_output_dir: Path):
     return combine_audio_files(audio_files, segments_output_dir.parent)
 
 
-def process_chapters(output_directory, book_content):
+def process_chapters(output_directory, book_content, minimum_lines_in_chapter):
     return [
         chapter_directory
         for idx, chapter, chapter_directory in get_chapters(
             output_directory, book_content
         )
-        if process_chapter(idx, chapter, chapter_directory)
+        if process_chapter(idx, chapter, chapter_directory, minimum_lines_in_chapter)
     ]
 
 
-def process_chapter(idx, chapter, chapter_directory):
+def process_chapter(idx, chapter, chapter_directory, minimum_lines_in_chapter):
     number_of_lines, formatted_chapter = format_chapter_content(chapter)
     logging.info(f"🏁 Processing Chapter {idx}. Number of lines: {number_of_lines}")
 
-    if number_of_lines < 3:
+    if number_of_lines < minimum_lines_in_chapter:
         logging.info(
             f"Skipping {chapter}. Not enough lines in the chapter. Lines found: {number_of_lines}"
         )
@@ -480,7 +487,9 @@ def main(args):
         selected_book_contents = (
             book_content[: args.chapters] if args.chapters > 0 else book_content
         )
-        chapter_directories = process_chapters(output_directory, selected_book_contents)
+        chapter_directories = process_chapters(
+            output_directory, selected_book_contents, args.minimum_lines_in_chapter
+        )
 
         formatted_text_path = output_directory / f"{book_slug}.txt"
         all_text = (
