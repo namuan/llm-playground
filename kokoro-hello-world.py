@@ -82,7 +82,7 @@ def main_play(kokoro: Kokoro):
     sd.wait()
 
 
-async def main_stream(kokoro):
+async def main_stream(kokoro: Kokoro):
     text = """
 We've just been hearing from Matthew Cappucci, a senior meteorologist at the weather app MyRadar, who says Kansas City is seeing its heaviest snow in 32 years - with more than a foot (30 to 40cm) having come down so far.
 
@@ -92,20 +92,38 @@ He says some areas near the Ohio River are like "skating rinks", telling our col
 
 Temperatures are set to drop in the next several days, in may cases dipping maybe below minus 10 to minus 15 degrees Celsius for an extended period of time.
 
-There is a special alert for Kansas, urging people not to leave their homes: "The ploughs are getting stuck, the police are getting stuck, everybody’s getting stuck - stay home."
+There is a special alert for Kansas, urging people not to leave their homes: "The ploughs are getting stuck, the police are getting stuck, everybody's getting stuck - stay home."
     """
-    stream = kokoro.create_stream(
-        text,
-        voice="am_michael",
-        speed=1.0,
-        lang="en-us",
-    )
-    count = 0
-    async for samples, sample_rate in stream:
-        count += 1
-        print(f"Playing audio stream ({count})...")
-        sd.play(samples, sample_rate)
-        sd.wait()
+
+    try:
+        stream = kokoro.create_stream(
+            text.strip(),  # Remove extra whitespace
+            voice="am_michael",
+            speed=1.0,
+            lang="en-us",
+        )
+
+        total_chunks = 0
+        async for samples, sample_rate in stream:
+            total_chunks += 1
+            try:
+                logging.info(f"Playing audio chunk {total_chunks}...")
+                sd.play(samples, sample_rate)
+                sd.wait()
+                if total_chunks % 5 == 0:  # Show progress every 5 chunks
+                    logging.info(f"Progress: {total_chunks} chunks processed")
+            except sd.PortAudioError as e:
+                logging.error(f"Audio playback error: {e}")
+                break
+            except KeyboardInterrupt:
+                logging.info("Playback interrupted by user")
+                break
+
+    except Exception as e:
+        logging.error(f"Stream creation failed: {e}")
+        return
+
+    logging.info(f"Finished playing {total_chunks} audio chunks")
 
 
 if __name__ == "__main__":
