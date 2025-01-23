@@ -1,3 +1,14 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# dependencies = [
+#   "litellm",
+#   "python-dotenv",
+#   "google-api-python-client",
+#   "google-auth-httplib2",
+#   "google-auth-oauthlib",
+#   "google-auth",
+# ]
+# ///
 import base64
 import os
 from typing import Dict, List, Optional, Tuple, Union
@@ -7,18 +18,47 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import Resource, build
-from openai import OpenAI
+from litellm import completion
 
 dotenv.load_dotenv()
 
 # If modifying these SCOPES, delete the token file
-SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
-
+# SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
+SCOPES = ["https://mail.google.com/"]
 
 CREDENTIALS_FILE = os.getenv("CREDENTIALS_FILE")
 TOKEN_KEY_FILE = os.getenv("TOKEN_KEY_FILE")
 FIRST_NAME = os.getenv("FIRST_NAME")
 LAST_NAME = os.getenv("LAST_NAME")
+
+FILTER_INSTRUCTION = f"""
+Your task is to assist in managing the Gmail inbox of a busy individual by filtering out promotional emails from her personal (i.e., not work) account.
+Your primary focus is to ensure that emails from individual people, whether they are known family members (with the same last name), close acquaintances, or potential contacts {FIRST_NAME} might be interested in hearing from, are not ignored.
+You need to distinguish between promotional, automated, or mass-sent emails and personal communications.
+Respond with "True" if the email is promotional and should be ignored based on the below criteria, or "False" otherwise.
+Remember to prioritize personal communications and ensure emails from genuine individuals are not filtered out.
+Criteria for Ignoring an Email:
+ - The email is promotional: It contains offers, discounts, or is marketing a product or service.
+ - The email is automated: It is sent by a system or service automatically, and not a real person.
+ - The email appears to be mass-sent or from a non-essential mailing list: It does not address {FIRST_NAME} by name, lacks personal context that would indicate its personally written to her, or is from a mailing list that does not pertain to her interests or work.
+
+Special Consideration:
+ - Exception: If the email is from an actual person, especially a family member (with the same last name), a close acquaintance, or a potential contact {FIRST_NAME} might be interested in, and contains personalized information indicating a one-to-one communication, do not mark it for ignoring regardless of the promotional content.
+ - Additionally, do not ignore emails requiring an action to be taken for important matters, such as needing to send a payment via Venmo, but ignore requests for non-essential actions like purchasing discounted items or signing up for rewards programs.
+
+Be cautious: If theres any doubt about whether an email is promotional or personal, respond with "False".
+
+The user message you will receive will have the following format:
+
+Subject: <email subject>
+To: <to names, to emails>
+From: <from name, from email>
+Cc: <cc names, cc emails>
+Gmail labels: <labels>
+Body: <plaintext body of the email>
+
+Your response must be:  "True" or "False"
+"""
 
 
 def get_gmail_service():
@@ -40,17 +80,6 @@ def get_gmail_service():
             token.write(creds.to_json())
 
     return build("gmail", "v1", credentials=creds)
-
-
-def get_openai_client():
-    # Make sure that OPENAI_API_KEY is set in your environment
-    return OpenAI()
-
-
-def get_user_name():
-    user_first_name = FIRST_NAME
-    user_last_name = LAST_NAME
-    return user_first_name, user_last_name
 
 
 def fetch_emails(
@@ -105,8 +134,6 @@ def parse_email_data(
         print(f"Failed to parse email data: {e}")
         return {}
 
-    print(f"Fetched email - Subject: {subject}, Sender: {sender}")
-
     # Extract the plain text body
     parts = msg["payload"].get("parts", [])
     for part in parts:
@@ -131,52 +158,11 @@ def parse_email_data(
 
 def evaluate_email(
     email_data: Dict[str, Union[str, List[str]]],
-    user_first_name: str,
-    user_last_name: str,
-    client: OpenAI,
 ) -> bool:
     MAX_EMAIL_LEN = 3000
     system_message: Dict[str, str] = {
         "role": "system",
-        "content": (
-            "Your task is to assist in managing the Gmail inbox of a busy individual "
-            "by filtering out promotional emails from her personal (i.e., not work) account. "
-            "Your primary focus is to ensure "
-            "that emails from individual people, whether they are known family members (with the "
-            f"same last name), close acquaintances, or potential contacts {user_first_name} might be interested "
-            "in hearing from, are not ignored. You need to distinguish between promotional, automated, "
-            "or mass-sent emails and personal communications.\n\n"
-            'Respond with "True" if the email is promotional and should be ignored based on '
-            'the below criteria, or "False" otherwise. Remember to prioritize personal '
-            "communications and ensure emails from genuine individuals are not filtered out.\n\n"
-            "Criteria for Ignoring an Email:\n"
-            "- The email is promotional: It contains offers, discounts, or is marketing a product "
-            "or service.\n"
-            "- The email is automated: It is sent by a system or service automatically, and not a "
-            "real person.\n"
-            "- The email appears to be mass-sent or from a non-essential mailing list: It does not "
-            f"address {user_first_name} by name, lacks personal context that would indicate it's personally written "
-            "to her, or is from a mailing list that does not pertain to her interests or work.\n\n"
-            "Special Consideration:\n"
-            "- Exception: If the email is from an actual person, especially a family member (with the "
-            f"same last name), a close acquaintance, or a potential contact {user_first_name} might be interested in, "
-            "and contains personalized information indicating a one-to-one communication, do not mark "
-            "it for ignoring regardless of the promotional content.\n\n"
-            "- Additionally, do not ignore emails requiring an action to be taken for important matters, "
-            "such as needing to send a payment via Venmo, but ignore requests for non-essential actions "
-            "like purchasing discounted items or signing up for rewards programs.\n\n"
-            "Be cautious: If there's any doubt about whether an email is promotional or personal, "
-            'respond with "False".\n\n'
-            "The user message you will receive will have the following format:\n"
-            "Subject: <email subject>\n"
-            "To: <to names, to emails>\n"
-            "From: <from name, from email>\n"
-            "Cc: <cc names, cc emails>\n"
-            "Gmail labels: <labels>\n"
-            "Body: <plaintext body of the email>\n\n"
-            "Your response must be:\n"
-            '"True" or "False"'
-        ),
+        "content": FILTER_INSTRUCTION,
     }
     truncated_body = email_data["body"][:MAX_EMAIL_LEN] + (
         "..." if len(email_data["body"]) > MAX_EMAIL_LEN else ""
@@ -193,53 +179,61 @@ def evaluate_email(
         ),
     }
 
-    # Send the messages to GPT-4, TODO add retry logic
-    try:
-        completion = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # switch to gpt-3.5-turbo for faster/ cheaper results (might be slightly less accurate)
-            messages=[system_message, user_message],
-            max_tokens=1,
-            temperature=0.0,
-        )
-    except Exception as e:
-        print(f"Failed to evaluate email with GPT-4: {e}")
-        return False
+    max_retries = 3
+    retry_count = 0
+    while retry_count < max_retries:
+        try:
+            messages = [system_message, user_message]
+            response = completion(
+                model="ollama_chat/llama3.2:latest",
+                messages=messages,
+                api_base="http://localhost:11434",
+                temperature=0.0,
+                max_tokens=1,
+            )
+            return response.choices[0].message.content.strip() == "True"
+        except Exception as e:
+            retry_count += 1
+            if retry_count == max_retries:
+                print(
+                    f"Failed to evaluate email with GPT-4 after {max_retries} attempts: {e}"
+                )
+                return False
+            print(f"Attempt {retry_count} failed, retrying...")
+    return False
 
-    # Extract and return the response
-    return completion.choices[0].message.content.strip() == "True"
+
+def mark_email_as_read(
+    gmail: Resource, message_info: Dict[str, Union[str, List[str]]]
+) -> int:
+    try:
+        gmail.users().messages().delete(userId="me", id=message_info["id"]).execute()
+        print("✅ Email deleted successfully")
+        return 1
+    except Exception as e:
+        print(f"❌ Failed to delete email: {e}")
+        return 0
 
 
 def process_email(
     gmail: Resource,
     message_info: Dict[str, Union[str, List[str]]],
     email_data_parsed: Dict[str, Union[str, List[str]]],
-    user_first_name: str,
-    user_last_name: str,
-    client: OpenAI,
 ) -> int:
-    # Evaluate email
     email_subject = email_data_parsed.get("subject")
-    if evaluate_email(email_data_parsed, user_first_name, user_last_name, client):
-        print(
-            f"🗄️ Email with subject {email_subject} is not worth the time, marking as read"
-        )
-        # Remove UNREAD label
-        try:
-            gmail.users().messages().modify(
-                userId="me",
-                id=message_info["id"],
-                body={
-                    "addLabelIds": ["CATEGORY_PROMOTIONS"],
-                    "removeLabelIds": ["UNREAD"],
-                },
-            ).execute()
-            print("✅ Email marked as read successfully")
-            return 1
-        except Exception as e:
-            print(f"❌ Failed to mark email as read: {e}")
+    email_sender = email_data_parsed.get("from")
+    if evaluate_email(email_data_parsed):
+        user_input = input(
+            f"🗄️ Email with subject '{email_subject}' from '{email_sender}' is not worth the time. Do you want to delete this email? (Y/n): "
+        ).lower()
+        if not user_input or user_input == "y":
+            return mark_email_as_read(gmail, message_info)
+        else:
+            print("Skipping this email")
+            return 0
     else:
         print(
-            f"👪 Email with subject {email_subject} is worth the time, leaving as unread"
+            f"👪 Email with subject '{email_subject}' from '{email_sender}' looks important ❗, leaving as unread"
         )
     return 0
 
@@ -257,8 +251,6 @@ def report_statistics(
 
 def main():
     gmail = get_gmail_service()
-    client = get_openai_client()
-    user_first_name, user_last_name = get_user_name()
 
     page_token: Optional[str] = None
 
@@ -273,9 +265,7 @@ def main():
         print(f"Fetched page {total_pages_fetched} of emails")
 
         total_unread_emails += len(messages)
-        for (
-            message_info
-        ) in messages:  # TODO process emails on a single page in parallel
+        for message_info in messages:
             # Fetch and parse email data
             email_data_parsed = parse_email_data(gmail, message_info)
 
@@ -284,9 +274,6 @@ def main():
                 gmail,
                 message_info,
                 email_data_parsed,
-                user_first_name,
-                user_last_name,
-                client,
             )
 
         if not page_token:
