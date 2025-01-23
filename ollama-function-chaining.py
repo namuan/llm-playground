@@ -51,6 +51,13 @@ def parse_args():
         dest="verbose",
         help="Increase verbosity of logging output",
     )
+    parser.add_argument(
+        "-m",
+        "--model",
+        type=str,
+        default="llama3.2:latest",
+        help="Model name to use for chat",
+    )
     return parser.parse_args()
 
 
@@ -169,6 +176,7 @@ class FunctionCaller:
 
 
 def main(args):
+    logging.info(f"Using model {args.model}")
     function_caller = FunctionCaller()
     functions_metadata = function_caller.create_functions_metadata()
 
@@ -194,7 +202,6 @@ def main(args):
     user_query = "Can you get me the weather forecast for a random city?"
     logging.info(f"Processing user query: {user_query}")
 
-    model_name = "llama3.1:latest"
     messages = [
         {
             "role": "system",
@@ -203,7 +210,7 @@ def main(args):
         {"role": "user", "content": user_query},
     ]
 
-    response = ollama.chat(model=model_name, messages=messages)
+    response = ollama.chat(model=args.model, messages=messages)
     logging.debug(f"LLM response: {response}")
 
     function_calls = response["message"]["content"]
