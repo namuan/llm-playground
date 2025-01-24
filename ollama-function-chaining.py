@@ -6,7 +6,7 @@
 # ]
 # ///
 """
-A script to demonstrate function chaining with Ollama LLM
+A simple example to demonstrate function chaining with Ollama LLM
 
 Usage:
 ./ollama-function-chaining.py -h
@@ -89,16 +89,9 @@ def get_random_city() -> str:
 class FunctionCaller:
     """A class to call functions from tools.py."""
 
-    def __init__(self):
-        self.functions = {
-            "get_weather_forecast": get_weather_forecast,
-            "get_random_city": get_random_city,
-        }
+    def __init__(self, functions):
+        self.functions = {func.__name__: func for func in functions}
         self.outputs = {}
-
-    def register_functions(self, functions):
-        # TODO: Implement this
-        ...
 
     def create_functions_metadata(self) -> list[dict]:
         """Creates the functions metadata for the prompt."""
@@ -177,27 +170,20 @@ class FunctionCaller:
 
 def main(args):
     logging.info(f"Using model {args.model}")
-    function_caller = FunctionCaller()
-    function_caller.register_functions([get_weather_forecast, get_random_city])
+    function_caller = FunctionCaller([get_weather_forecast, get_random_city])
     functions_metadata = function_caller.create_functions_metadata()
 
-    prompt_beginning = """
+    system_prompt = f"""
     You are an AI assistant that can help the user with a variety of tasks. You have access to the following functions:
-    """
+    <tools> {json.dumps(functions_metadata, indent=4)} </tools>
 
-    system_prompt_end = """
     When the user asks you a question, if you need to use functions, provide ONLY the function calls, and NOTHING ELSE, in the format:
     [
-        { "name": "function_name_1", "params": { "param_1": "value_1", "param_2": "value_2" }, "output": "The output variable name, to be possibly used as input for another function},
-        { "name": "function_name_2", "params": { "param_3": "value_3", "param_4": "output_1"}, "output": "The output variable name, to be possibly used as input for another function"},
+        {{ "name": "function_name_1", "params": {{ "param_1": "value_1", "param_2": "value_2" }}, "output": "The output variable name, to be possibly used as input for another function"}},
+        {{ "name": "function_name_2", "params": {{ "param_3": "value_3", "param_4": "output_1"}}, "output": "The output variable name, to be possibly used as input for another function"}},
         ...
     ]
     """
-    system_prompt = (
-        prompt_beginning
-        + f"<tools> {json.dumps(functions_metadata, indent=4)} </tools>"
-        + system_prompt_end
-    )
 
     user_query = "Can you get me the weather forecast for a random city?"
     logging.info(f"Processing user query: {user_query}")
