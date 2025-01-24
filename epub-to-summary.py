@@ -5,29 +5,28 @@
 # ]
 # ///
 import argparse
+import json
+import logging
 from pathlib import Path
 
 from litellm import completion
 
-LITELLM_MODEL = "ollama/deepseek-r1:1.5b"
+LITELLM_MODEL = "ollama/llama3.1:latest"
 LITELLM_BASE_URL = "http://localhost:11434"
 
 
-# Function to load the entire text file
 def load_text(file_path):
     with file_path.open("r", encoding="utf-8") as file:
         return file.read()
 
 
-# Function to split the text into chapters based on a separator
 def split_into_chapters(text, separator):
     return text.split(separator)
 
 
-# Function to call OpenAI and summarize a chapter with context using the new prompt
 def openai_summarize_chapter(context, chapter_text):
     prompt = f"""
-    Summarize the text below, synthesizing it with the provided context. Prioritize clarity, critical analysis, and relevance to the book's purpose.
+    Summarize the text below, synthesizing it with the provided context.
 
     Context:
     {context}
@@ -35,16 +34,25 @@ def openai_summarize_chapter(context, chapter_text):
     Text:
     {chapter_text}
 
-    Summarize the text with clarity and critical analysis, keeping it relevant to the book's purpose. Do not use any markdown formatting in your response.
+    Summarize the text with clarity and critical analysis, keeping it relevant to the overall text.
 
-    Start by providing a concise and neutral overview of the section's main ideas. Next, explain how this section contributes to or challenges the book's thesis. Consider linking any new evidence or data to earlier arguments or unresolved questions.
+    Do not add any headings in the response.
+
+    Do not use any markdown formatting in your response.
+
+    Write the summary from the author as the first person perspective.
+
+    Consider linking any new evidence or data to earlier arguments or unresolved questions.
 
     Identify any key contributions, such as new theories, frameworks, or shifts in perspective, and mention practical applications or real-world implications, if relevant.
 
-    Finally, address any unanswered questions or gaps this section might highlight. Point out any weaknesses or areas where further analysis could be valuable.
+    Finally, address any unanswered questions or gaps this section might highlight.
+
+    Point out any weaknesses or areas where further analysis could be valuable.
+
+    Capture the gist of any stories told by the author along with any minor by important details.
     """
 
-    # Use litellm to call the OpenAI API
     response = completion(
         model=LITELLM_MODEL,
         messages=[{"content": prompt, "role": "user"}],
@@ -56,76 +64,124 @@ def openai_summarize_chapter(context, chapter_text):
     return response["choices"][0]["message"]["content"]
 
 
-def iterative_refinement(chapters):
-    context_summary = ""
-    chapter_summaries = []
+class ProgressTracker:
+    def __init__(self, checkpoint_file):
+        self.checkpoint_file = checkpoint_file
+        self.progress = self.load_progress()
 
-    for i, chapter in enumerate(chapters):
+    def load_progress(self):
+        if self.checkpoint_file.exists():
+            with self.checkpoint_file.open("r") as f:
+                return json.load(f)
+        return {
+            "current_chapter": 0,
+            "current_line": 0,
+            "context_summary": "",
+            "chapter_summaries": [],
+        }
+
+    def save_progress(self):
+        with self.checkpoint_file.open("w") as f:
+            json.dump(self.progress, f, indent=2)
+
+    def update_progress(
+        self, chapter_idx, line_idx, context_summary, chapter_summaries
+    ):
+        self.progress["current_chapter"] = chapter_idx
+        self.progress["current_line"] = line_idx
+        self.progress["context_summary"] = context_summary
+        self.progress["chapter_summaries"] = chapter_summaries
+        self.save_progress()
+
+
+def iterative_refinement(chapters, book_dir, tracker):
+    context_summary = tracker.progress["context_summary"]
+    chapter_summaries = tracker.progress["chapter_summaries"]
+    start_chapter = tracker.progress["current_chapter"]
+
+    # Create a file for incremental chapter summaries
+    incremental_file = book_dir / "incremental_summaries.txt"
+
+    def append_to_summary(text):
+        with incremental_file.open("a", encoding="utf-8") as f:
+            f.write(text)
+
+    for i in range(start_chapter, len(chapters)):
         print(f"Summarizing chapter {i+1}...")
-
-        lines = [line.strip() for line in chapter.split("\n") if line.strip()]
+        append_to_summary(f"\nChapter {i+1} Summary:\n")
+        lines = [line.strip() for line in chapters[i].split("\n") if line.strip()]
         line_summaries = []
-        line_context = ""
+        context_so_far = ""
 
-        for j in range(0, len(lines), 3):
-            line_group = " ".join(lines[j : j + 3])
+        start_line = tracker.progress["current_line"] if i == start_chapter else 0
+
+        number_of_lines_to_group = 3
+        for j in range(start_line, len(lines), number_of_lines_to_group):
+            line_group = " ".join(lines[j : j + number_of_lines_to_group])
             if not line_group:
                 continue
 
-            line_summary = openai_summarize_chapter(line_context, line_group)
+            line_summary = openai_summarize_chapter(context_so_far, line_group)
             line_summaries.append(line_summary)
-            line_context = refine_summary(line_context, line_summary)
+            context_so_far = refine_summary(context_so_far, line_summary)
 
-            print(f"Processed lines {j+1}-{min(j+3, len(lines))} of chapter {i+1}")
-            print(f" > {line_summary}")
+            print(
+                f"Processed lines {j+1}-{min(j+number_of_lines_to_group, len(lines))} of chapter {i+1}"
+            )
+            logging.debug(f" > {line_summary}")
+
+            # Update progress after each line group
+            append_to_summary(line_summary + "\n")
+            tracker.update_progress(
+                i, j + number_of_lines_to_group, context_summary, chapter_summaries
+            )
 
         chapter_summary = "\n".join(line_summaries)
         chapter_summaries.append(chapter_summary)
         context_summary = refine_summary(context_summary, chapter_summary)
 
+        # Update progress after each chapter
+        tracker.update_progress(i + 1, 0, context_summary, chapter_summaries)
+
     return chapter_summaries
 
 
-# Function to refine the overall summary with the current chapter's summary (used for building context)
 def refine_summary(current_summary, new_summary):
-    # Concatenate the current summary with the new chapter's summary for future context
-    refined_summary = current_summary + "\n" + new_summary
-    return refined_summary
+    return current_summary + "\n" + new_summary
 
 
 def summarize_book(file_path, chapter_separator, output_dir):
-    # Load the book content
     text = load_text(file_path)
-
-    # Split the text into chapters
     chapters = split_into_chapters(text, chapter_separator)
 
-    # Perform iterative refinement to generate a summary for each chapter
-    chapter_summaries = iterative_refinement(chapters)
-
-    # Generate output file paths using the input file name and output directory
-    base_name = file_path.stem  # Get the base name without extension
+    # Set up the book directory and checkpoint file
+    base_name = file_path.stem
     book_dir = output_dir / base_name
     book_dir.mkdir(parents=True, exist_ok=True)
 
+    checkpoint_file = book_dir / f"{base_name}_checkpoint.json"
+    tracker = ProgressTracker(checkpoint_file)
+
+    # Generate summaries with progress tracking
+    chapter_summaries = iterative_refinement(chapters, book_dir, tracker)
+
+    # Save final outputs
     summary_file = book_dir / f"{base_name}_summary.txt"
     chapter_summaries_file = book_dir / f"{base_name}_chapter_summaries.txt"
 
-    # Save the chapter summaries to a file
     save_summaries(chapter_summaries, chapter_summaries_file)
-
-    # Save the final summary to the specified output file
     final_summary = "\n".join(chapter_summaries)
     save_summary(final_summary, summary_file)
 
+    # Clean up checkpoint file after successful completion
+    checkpoint_file.unlink(missing_ok=True)
 
-# Function to save the final summary to a file
+
 def save_summary(summary, file_path):
     with file_path.open("w", encoding="utf-8") as file:
         file.write(summary)
 
 
-# Function to save individual chapter summaries to a file
 def save_summaries(summaries, file_path):
     with file_path.open("w", encoding="utf-8") as file:
         for i, chapter_summary in enumerate(summaries, start=1):
@@ -135,16 +191,11 @@ def save_summaries(summaries, file_path):
 
 def main():
     args = parse_args()
-
-    # Ensure the output directory exists
     args.output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Call the main summarization function
     summarize_book(args.file_path, args.separator, args.output_dir)
 
 
 def parse_args():
-    # Set up command-line argument parsing
     parser = argparse.ArgumentParser(
         description="Summarize a book using iterative refinement."
     )
@@ -166,7 +217,7 @@ def parse_args():
     parser.add_argument(
         "--output_dir",
         type=Path,
-        default=Path.cwd(),  # Default to the current working directory
+        default=Path.cwd(),
         help="The output directory to save the summary files (default: current directory).",
     )
     args = parser.parse_args()
