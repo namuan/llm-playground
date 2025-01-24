@@ -500,7 +500,7 @@ def main(args):
             if chapter_directory.joinpath(FORMATTED_CHAPTER_FILE_NAME).exists()
         )
         formatted_text_path.write_text(
-            "\n\n".join(all_text),
+            "\n\n--CHAPTER-BREAK--\n\n".join(all_text),
             encoding="utf-8",
         )
         logging.info(f"Formatted book saved at {formatted_text_path}")
