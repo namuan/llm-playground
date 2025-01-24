@@ -56,22 +56,31 @@ def openai_summarize_chapter(context, chapter_text):
     return response["choices"][0]["message"]["content"]
 
 
-# Function to iteratively refine the summary and save individual chapter summaries
 def iterative_refinement(chapters):
     context_summary = ""
-    chapter_summaries = []  # To store individual chapter summaries
+    chapter_summaries = []
 
     for i, chapter in enumerate(chapters):
         print(f"Summarizing chapter {i+1}...")
 
-        # Use the provided prompt to summarize the chapter, incorporating context from previous chapters
-        chapter_summary = openai_summarize_chapter(context_summary, chapter)
-        print(f"Chapter {i+1} Summary: {chapter_summary}\n")
+        lines = [line.strip() for line in chapter.split("\n") if line.strip()]
+        line_summaries = []
+        line_context = ""
 
-        # Save the initial chapter summary
+        for j in range(0, len(lines), 3):
+            line_group = " ".join(lines[j : j + 3])
+            if not line_group:
+                continue
+
+            line_summary = openai_summarize_chapter(line_context, line_group)
+            line_summaries.append(line_summary)
+            line_context = refine_summary(line_context, line_summary)
+
+            print(f"Processed lines {j+1}-{min(j+3, len(lines))} of chapter {i+1}")
+            print(f" > {line_summary}")
+
+        chapter_summary = "\n".join(line_summaries)
         chapter_summaries.append(chapter_summary)
-
-        # Update the context summary to include this chapter's summary for the next iteration
         context_summary = refine_summary(context_summary, chapter_summary)
 
     return chapter_summaries
