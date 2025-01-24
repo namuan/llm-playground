@@ -2,6 +2,7 @@
 # /// script
 # dependencies = [
 #   "ollama",
+#   "pydantic",
 # ]
 # ///
 """
@@ -17,26 +18,22 @@ import json
 import logging
 import random
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from typing import Dict, List
 
 import ollama
+from pydantic import BaseModel
+
+from logger import setup_logging
 
 
-def setup_logging(verbosity):
-    logging_level = logging.WARNING
-    if verbosity == 1:
-        logging_level = logging.INFO
-    elif verbosity >= 2:
-        logging_level = logging.DEBUG
+class Function(BaseModel):
+    name: str
+    params: Dict[str, str]
+    output: str
 
-    logging.basicConfig(
-        handlers=[
-            logging.StreamHandler(),
-        ],
-        format="%(asctime)s - %(filename)s:%(lineno)d - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging_level,
-    )
-    logging.captureWarnings(capture=True)
+
+class Pipeline(BaseModel):
+    functions: List[Function]
 
 
 def parse_args():
@@ -99,6 +96,10 @@ class FunctionCaller:
         }
         self.outputs = {}
 
+    def register_functions(self, functions):
+        # TODO: Implement this
+        ...
+
     def create_functions_metadata(self) -> list[dict]:
         """Creates the functions metadata for the prompt."""
 
@@ -149,7 +150,7 @@ class FunctionCaller:
 
         return functions_metadata
 
-    def call_function(self, function):
+    def call_function(self, function: Function):
         """Call the function from the given input."""
 
         def check_if_input_is_output(input: dict) -> dict:
@@ -158,12 +159,11 @@ class FunctionCaller:
                     input[key] = self.outputs[value]
             return input
 
-        function_name = function["name"]
+        function_name = function.name
         logging.info(f"Calling function: {function_name}")
 
-        function_input = function["params"] if "params" in function else None
         function_input = (
-            check_if_input_is_output(function_input) if function_input else None
+            check_if_input_is_output(function.params) if function.params else None
         )
 
         output = (
@@ -171,13 +171,14 @@ class FunctionCaller:
             if function_input
             else self.functions[function_name]()
         )
-        self.outputs[function["output"]] = output
+        self.outputs[function.output] = output
         return output
 
 
 def main(args):
     logging.info(f"Using model {args.model}")
     function_caller = FunctionCaller()
+    function_caller.register_functions([get_weather_forecast, get_random_city])
     functions_metadata = function_caller.create_functions_metadata()
 
     prompt_beginning = """
@@ -186,7 +187,6 @@ def main(args):
 
     system_prompt_end = """
     When the user asks you a question, if you need to use functions, provide ONLY the function calls, and NOTHING ELSE, in the format:
-    <function_calls>
     [
         { "name": "function_name_1", "params": { "param_1": "value_1", "param_2": "value_2" }, "output": "The output variable name, to be possibly used as input for another function},
         { "name": "function_name_2", "params": { "param_3": "value_3", "param_4": "output_1"}, "output": "The output variable name, to be possibly used as input for another function"},
@@ -210,23 +210,18 @@ def main(args):
         {"role": "user", "content": user_query},
     ]
 
-    response = ollama.chat(model=args.model, messages=messages)
+    response = ollama.chat(
+        model=args.model,
+        messages=messages,
+        format=Pipeline.model_json_schema(),
+    )
     logging.debug(f"LLM response: {response}")
 
-    function_calls = response["message"]["content"]
-    if function_calls.startswith("<function_calls>"):
-        function_calls = function_calls.split("<function_calls>")[1]
-
-    try:
-        function_calls_json: list[dict[str, str]] = json.loads(function_calls)
-    except json.JSONDecodeError:
-        function_calls_json = []
-        logging.error("Model response not in desired JSON format")
-    finally:
-        logging.info(f"Function calls: {function_calls_json}")
+    function_pipeline = Pipeline.model_validate_json(response.message.content)
+    print(function_pipeline)
 
     output = ""
-    for function in function_calls_json:
+    for function in function_pipeline.functions:
         output = f"Agent Response: {function_caller.call_function(function)}"
 
     logging.info(f"Final output: {output}")
