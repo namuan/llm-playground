@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # dependencies = [
-#   "browser-use",
+#   "browser-use==0.1.28",
 #   "langchain",
 #   "langchain-community",
 #   "langchain-ollama",
@@ -23,6 +23,8 @@ from argparse import ArgumentParser, RawDescriptionHelpFormatter
 
 from browser_use import Agent
 from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 
 def setup_logging(verbosity):
@@ -57,16 +59,23 @@ def parse_args():
     )
     parser.add_argument(
         "--model",
-        default="llama3.1",
+        default="llama3.1:latest",
         help="Name of the Ollama model to use",
     )
     return parser.parse_args()
 
 
 async def run_agent(model_name):
-    llm = ChatOllama(model=model_name)
+    llm = ChatOllama(model=model_name, num_ctx=128000)
+    llm = ChatOpenAI(
+        base_url="http://localhost:11434/v1",
+        model="llama3.2:latest",
+        api_key=SecretStr("foo"),
+        temperature=0.0,
+    )
+    llm = ChatOpenAI(model="gpt-4o", temperature=0.0)
     agent = Agent(
-        task="Find a one-way flight from Bali to Oman on 12 January 2025 on Google Flights. Return me the cheapest option.",
+        task="Find a one-way flight from Bali to Oman flying tomorrow on Google Flights. Return me the cheapest option.",
         llm=llm,
     )
     logging.info(f"Starting agent task with model: {model_name}")
