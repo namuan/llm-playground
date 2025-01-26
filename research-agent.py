@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# dependencies = [
+#   "litellm",
+#   "beautifulsoup4",
+#   "duckduckgo_search",
+#   "python-slugify",
+# ]
+# ///
 """
 A personal research assistant
 
@@ -10,18 +18,18 @@ Usage:
 """
 import argparse
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
-from itertools import islice
 from pathlib import Path
-from typing import List
 
-from openai import OpenAI
-
-from logger import setup_logging
-
-client = OpenAI()
+import litellm
 import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
+from slugify import slugify
+
+from logger import setup_logging
+
+LITELLM_MODEL = "ollama/llama3.1:latest"
+LITELLM_BASE_URL = "http://localhost:11434"
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,17 +53,20 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "-f",
-        "--file",
+        "--target-folder",
         type=str,
         required=True,
-        help="Target markdown file path",
+        help="Target folder for output files",
     )
     return parser.parse_args()
 
 
-class Question:
-    """A class to represent a question."""
+def generate_slug(text: str) -> str:
+    """Generate a clean slug from input text."""
+    return slugify(text, max_length=100, lowercase=True)
 
+
+class Question:
     def __init__(self, question_text: str):
         """Initializes the question object."""
         self.question_text = question_text
@@ -66,19 +77,20 @@ class Question:
 
 
 class SearchEngine:
-    """A class to represent a search engine."""
-
     def __init__(self):
         """Initializes the search engine object."""
 
     def search_for_question(self, question_text: str) -> list:
-        """Searches for the question and returns a list of search results."""
         results = DDGS().text(
-            question_text, region="wt-wt", safesearch="Off", timelimit="y"
+            question_text,
+            region="wt-wt",
+            safesearch="Off",
+            timelimit="y",
+            max_results=10,
         )
         return [
             Website(result["href"], result["title"], result["body"])
-            for result in islice(results, 10)
+            for result in results
         ]
 
 
@@ -107,68 +119,97 @@ class Website:
 class Summary:
     """A class to represent a summary."""
 
-    def __init__(self, summary_text: str, link: list):
+    def __init__(self, summary_text: str, website_title: str, link: str):
         """Initializes the summary object."""
         self.summary_text = summary_text
+        self.website_title = website_title
         self.link = link
 
     def __str__(self) -> str:
         """Returns the summary as a string."""
-        return f"* {self.summary_text}\n{self.link}"
+        return f"### {self.website_title}:\n{self.summary_text}"
 
 
-class OpenAIWriter:
+class SummaryWriter:
+    summary_system_prompt: str = """
+    Your goal is to generate a high-quality summary
+
+    1. Highlight the most relevant information from each source
+    2. Provide a concise overview of the key points related to the report topic
+    3. Emphasize significant findings or insights
+    4. Ensure a coherent flow of information
+
+    CRITICAL REQUIREMENTS:
+    - Start IMMEDIATELY with the summary content - no introductions or meta-commentary
+    - DO NOT include ANY of the following:
+      * Phrases about your thought process ("Let me start by...", "I should...", "I'll...")
+      * Explanations of what you're going to do
+      * Statements about understanding or analyzing the sources
+      * Mentions of summary extension or integration
+    - Focus ONLY on factual, objective information
+    - Maintain a consistent technical depth
+    - Avoid redundancy and repetition
+    - DO NOT use phrases like "based on the new results" or "according to additional sources"
+    - DO NOT add a References or Works Cited section
+    - DO NOT use any XML-style tags like <think> or <answer>
+    - Begin directly with the summary text without any tags, prefixes, or meta-commentary
+    """
+
     def write_report(self, webpage_text: str) -> str:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Summarize content you are provided.Ignore any whitespace and irrelevant information.",
-                },
-                {"role": "user", "content": webpage_text},
-            ],
-            temperature=0,
-            max_tokens=1024,
+        messages = [
+            {
+                "role": "system",
+                "content": self.summary_system_prompt,
+            },
+            {"role": "user", "content": webpage_text},
+        ]
+        response = litellm.completion(
+            model=LITELLM_MODEL,
+            messages=messages,
+            api_base=LITELLM_BASE_URL,
+            stream=False,
         )
-
-        return response.choices[0].message.content
-
-    def embeddings(self, input: List[str]) -> List[List[str]]:
-        response = client.embeddings.create(model="text-embedding-ada-002", input=input)
-        return [data.embedding for data in response.data]
-
-
-class SummaryGenerator:
-    def __init__(self):
-        self.oai = OpenAIWriter()
-
-    def generate_summary(self, summaries):
-        return " ".join([summary.summary_text for summary in summaries])
+        return response["choices"][0]["message"]["content"]
 
 
 def main(args: argparse.Namespace) -> None:
+    question_slug = generate_slug(args.question)
+    target_folder = Path(args.target_folder) / question_slug
+    target_folder.mkdir(parents=True, exist_ok=True)
+
+    raw_data_folder = target_folder / "raw_data"
+    raw_data_folder.mkdir(exist_ok=True)
+
     question = Question(args.question)
     search_engine = SearchEngine()
     websites = search_engine.search_for_question(question.receive_question())
-    print(f"🌐 Found {len(websites)} Websites")
-    summaries = []
-    oai = OpenAIWriter()
-    output_file = Path(args.file)
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.file, "w") as f:
-        for website in websites:
-            generated_summary = oai.write_report(website.get_summary())
-            summary = Summary(generated_summary, website.url)
-            summaries.append(summary)
-            print(f"📝 {summary.summary_text}")
-            f.write(f"# {website.text}\n")
-            f.write(f"{summary.summary_text}\n\n")
+    writer = SummaryWriter()
 
-        summary_generator = SummaryGenerator()
-        final_report = summary_generator.generate_summary(summaries)
+    output_file = target_folder / f"{question_slug}.md"
+    summaries = []
+
+    for website in websites:
+        scraped_text = website.get_summary()
+        website_slug = generate_slug(website.url)
+        raw_data_file = raw_data_folder / f"{website_slug}.txt"
+        with open(raw_data_file, "w", encoding="utf-8") as f:
+            f.write(scraped_text)
+
+        generated_summary = writer.write_report(scraped_text)
+        summary = Summary(generated_summary, website.text, website.url)
+        summaries.append(summary)
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        for summary in summaries:
+            f.write(f"{summary}")
+
+        collective_summaries = " ".join([summary.summary_text for summary in summaries])
+        final_report = writer.write_report(collective_summaries)
         f.write("# Final Report\n")
         f.write(f"{final_report}\n\n")
+        f.write("# References: \n")
+        for summary in summaries:
+            f.write(f"- {summary.link}\n")
 
 
 if __name__ == "__main__":
