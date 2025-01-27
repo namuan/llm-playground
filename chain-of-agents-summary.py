@@ -8,6 +8,7 @@
 A Chain of Agents Summary Generator
 """
 import argparse
+import logging
 from pathlib import Path
 
 
@@ -17,7 +18,32 @@ class InputChunker:
         self.context_window_size = context_window_size
 
     def chunk_input(self, text: str) -> list:
-        """Splits the input text into chunks based on the context window size and paragraph boundaries."""
+        """Splits input text into chunks based on context window size and paragraph boundaries."""
+        chunks = []
+        paragraphs = text.split("\n\n")
+        current_chunk = []
+        current_size = 0
+
+        for paragraph in paragraphs:
+            # Rough estimation of tokens (words + punctuation)
+            paragraph_size = len(paragraph.split())
+
+            # If adding this paragraph exceeds the window size
+            if current_size + paragraph_size > self.context_window_size:
+                # Save current chunk if not empty
+                if current_chunk:
+                    chunks.append("\n\n".join(current_chunk))
+                    current_chunk = []
+                    current_size = 0
+
+            current_chunk.append(paragraph)
+            current_size += paragraph_size
+
+        # Add the last chunk if there's anything left
+        if current_chunk:
+            chunks.append("\n\n".join(current_chunk))
+
+        return chunks
 
 
 # Control Layer: Manages the task and flow between agents
@@ -27,7 +53,28 @@ class TaskScheduler:
         self.manager = manager
 
     def schedule_task(self, text_chunks: list):
-        """Assigns chunks to worker agents in sequence and manages communication between them."""
+        """Schedules and manages the processing of chunks by worker agents."""
+        communication_units = []
+        previous_cu = None
+
+        for i, chunk in enumerate(text_chunks):
+            # Round-robin worker selection
+            worker = self.workers[i % len(self.workers)]
+
+            # Process chunk with retry logic
+            for retry in range(3):  # Maximum 3 retries
+                try:
+                    cu = worker.process_chunk(chunk, previous_cu)
+                    if cu["status"] == "success":
+                        communication_units.append(cu)
+                        previous_cu = cu
+                        break
+                except Exception as e:
+                    if retry == 2:  # Last retry
+                        # Log error and continue with next chunk
+                        print(f"Failed to process chunk after 3 retries: {str(e)}")
+
+        return communication_units
 
 
 # Worker Agent: Processes individual chunks and generates Communication Units (CU)
@@ -36,7 +83,28 @@ class WorkerAgent:
         self.model = model
 
     def process_chunk(self, chunk: str, previous_cu: dict = None) -> dict:
-        """Processes the given chunk using the LLM and returns a communication unit (CU)."""
+        """Process chunk and return a Communication Unit."""
+        try:
+            # Here you would typically call your LLM with the chunk
+            # For now, we'll create a mock summary
+            summary = f"Summary of chunk: {chunk[:100]}..."
+
+            communication_unit = {
+                "summary": summary,
+                "chunk_length": len(chunk),
+                "previous_context": previous_cu["summary"] if previous_cu else None,
+                "model_used": self.model,
+                "status": "success",
+            }
+
+            return communication_unit
+
+        except Exception as e:
+            return {
+                "status": "error",
+                "error_message": str(e),
+                "chunk_length": len(chunk),
+            }
 
 
 # Manager Agent: Collects CUs and synthesizes the final output
@@ -45,7 +113,21 @@ class ManagerAgent:
         self.model = model
 
     def synthesize_output(self, communication_units: list) -> str:
-        """Synthesizes the communication units from worker agents into a final output."""
+        """Synthesize final output from communication units."""
+        if not communication_units:
+            return "No content to summarize."
+
+        # Combine all summaries
+        combined_summary = []
+        for cu in communication_units:
+            if cu.get("status") == "success":
+                combined_summary.append(cu["summary"])
+
+        # Here you would typically use the manager's LLM to create a cohesive summary
+        # For now, we'll just join them
+        final_summary = "\n\n".join(combined_summary)
+
+        return final_summary
 
 
 # Error Handling: Manages retries and skipping in case of failures
@@ -83,7 +165,17 @@ class Logger:
         self.log_level = log_level
 
     def log(self, message: str, level: str = "INFO"):
-        """Logs messages with specified logging levels (DEBUG, INFO, ERROR)."""
+        """Log messages with specified level."""
+        if not hasattr(self, "_logger"):
+            # Configure logger
+            logging.basicConfig(
+                format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                level=getattr(logging, self.log_level.upper()),
+            )
+            self._logger = logging.getLogger("ChainOfAgents")
+
+        log_method = getattr(self._logger, level.lower())
+        log_method(message)
 
 
 # Main System Class to orchestrate the entire process
