@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # dependencies = [
-#   "browser-use==0.1.28",
+#   "browser-use==0.1.29",
 #   "langchain",
 #   "langchain-community",
 #   "langchain-ollama",
@@ -20,11 +20,10 @@ Usage:
 import asyncio
 import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from datetime import datetime, timedelta
 
 from browser_use import Agent
 from langchain_ollama import ChatOllama
-from langchain_openai import ChatOpenAI
-from pydantic import SecretStr
 
 
 def setup_logging(verbosity):
@@ -67,16 +66,24 @@ def parse_args():
 
 async def run_agent(model_name):
     llm = ChatOllama(model=model_name, num_ctx=128000)
-    llm = ChatOpenAI(
-        base_url="http://localhost:11434/v1",
-        model="llama3.2:latest",
-        api_key=SecretStr("foo"),
-        temperature=0.0,
-    )
-    llm = ChatOpenAI(model="gpt-4o", temperature=0.0)
+    # llm = ChatOpenAI(
+    #     base_url="http://localhost:11434/v1",
+    #     model="qwen2.5:latest",
+    #     api_key=SecretStr("foo"),
+    #     temperature=0.0,
+    # )
+    # llm = ChatOpenAI(model="gpt-4o", temperature=0.0)
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     agent = Agent(
-        task="Find a one-way flight from Bali to Oman flying tomorrow on Google Flights. Return me the cheapest option.",
+        task=f"""
+        Start with Google Search.
+        Accept all cookies.
+        Find a one-way flight from London to Dubai flying {tomorrow} on Google Flights.
+        Return me the cheapest option.
+        Show me all the details including flight time, duration and ticket price.
+        """,
         llm=llm,
+        use_vision=True,
     )
     logging.info(f"Starting agent task with model: {model_name}")
     result = await agent.run()
