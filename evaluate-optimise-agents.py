@@ -42,10 +42,10 @@ def JSON_llm(user_prompt: str, schema, system_prompt: str = None):
         response = ollama.chat(
             model="llama3.2:latest",
             messages=messages,
-            format=Evaluation.model_json_schema(),
+            format=schema.model_json_schema(),
         )
 
-        return Evaluation.model_validate_json(response.message.content)
+        return schema.model_validate_json(response.message.content)
 
     except ValidationError as e:
         error_message = f"Failed to parse JSON: {e}"
@@ -60,7 +60,7 @@ def generate(task: str, generator_prompt: str, context: str = "") -> tuple[str, 
         else f"{generator_prompt}\nTask: {task}"
     )
 
-    response = run_llm(full_prompt, model="qwen2.5-coder:14b")
+    response = run_llm(full_prompt, model="qwen2.5:latest")
 
     print("\n## Generation start")
     print(f"Output:\n{response}\n")
