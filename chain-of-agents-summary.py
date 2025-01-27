@@ -9,12 +9,9 @@
 A Chain of Agents Summary Generator
 """
 import argparse
-import logging
 from pathlib import Path
 
 from litellm import completion
-
-from logger import setup_logging
 
 LITELLM_MODEL = "ollama/llama3.1:latest"
 LITELLM_BASE_URL = "http://localhost:11434"
@@ -131,7 +128,7 @@ class WorkerAgent:
     def process_chunk(self, chunk: str, previous_cu: dict = None) -> dict:
         """Process chunk and return a Communication Unit."""
         try:
-            logging.info(
+            print(
                 f"Worker {self.worker_id=} processing {chunk[:100]} using {self.model=}"
             )
             summary = generate_text_summary(self.model, chunk)
@@ -208,26 +205,34 @@ class CLI:
 
 # Main System Class to orchestrate the entire process
 class ChainOfAgentsSummarizationSystem:
-    def __init__(self, input_chunker: InputChunker, scheduler: TaskScheduler, cli: CLI):
+    def __init__(
+        self,
+        input_chunker: InputChunker,
+        scheduler: TaskScheduler,
+        cli: CLI,
+        num_passes: int,
+    ):
         self.input_chunker = input_chunker
         self.scheduler = scheduler
         self.cli = cli
+        self.num_passes = num_passes
 
     def start(self):
         """Starts the chain-of-agents system for summarization."""
         input_text = self.cli.get_input()
-
         text_chunks = self.input_chunker.chunk_input(input_text)
-
         selected_chunks = text_chunks[:10]
 
-        communication_units = self.scheduler.schedule_task(
-            selected_chunks
-        )  # Store the return value
-
-        final_output = self.scheduler.manager.synthesize_output(
-            communication_units
-        )  # Pass communication_units instead of text_chunks
+        final_chunks = selected_chunks
+        final_output = None
+        for pass_num in range(self.num_passes):
+            print(
+                f"🏁 Going through pass {pass_num}. Total lines to process {len(final_chunks)}"
+            )
+            communication_units = self.scheduler.schedule_task(final_chunks)
+            final_output = self.scheduler.manager.synthesize_output(communication_units)
+            if pass_num < self.num_passes - 1:
+                final_chunks = self.input_chunker.chunk_input(final_output)
 
         self.cli.display_output(final_output)
 
@@ -241,18 +246,14 @@ def main(args):
         WorkerAgent(model=LITELLM_MODEL, worker_id=f"worker_{i}") for i in range(2)
     ]
 
-    # Initialize Manager Agent
     manager = ManagerAgent(model="LLM_Manager")
-
-    # Initialize Task Scheduler with workers and manager
     scheduler = TaskScheduler(workers=workers, manager=manager)
-
-    # Initialize CLI (Pass input text directly to CLI for simplicity in this example)
     cli = CLI(input_text=args.input_file.read_text(), output_file=args.output_file)
-
-    # Initialize the Chain-of-Agents system
     system = ChainOfAgentsSummarizationSystem(
-        input_chunker=input_chunker, scheduler=scheduler, cli=cli
+        input_chunker=input_chunker,
+        scheduler=scheduler,
+        cli=cli,
+        num_passes=args.passes,
     )
 
     # Start the summarization process
@@ -260,28 +261,24 @@ def main(args):
 
 
 def parse_args():
-    # Argument parsing
     parser = argparse.ArgumentParser(
         description="Summarize a text file using Chain-of-Agents system."
     )
     parser.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=0,
-        dest="verbose",
-        help="Increase verbosity of logging output",
-    )
-    # Required argument: Path to the input file
-    parser.add_argument(
         "input_file", type=Path, help="Path to the input text file to be summarized."
     )
-    # Optional argument: Path to the output file
     parser.add_argument(
         "-o",
         "--output_file",
         type=str,
         help="Optional path to save the summarized output.",
+    )
+    parser.add_argument(
+        "-p",
+        "--passes",
+        type=int,
+        default=3,
+        help="Number of passes to run the summarization. Default is 3.",
     )
     args = parser.parse_args()
     return args
@@ -289,5 +286,4 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    setup_logging(args.verbose)
     main(args)
