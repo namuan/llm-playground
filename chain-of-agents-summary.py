@@ -2,6 +2,7 @@
 # /// script
 # dependencies = [
 #   "pandas",
+#   "litellm",
 # ]
 # ///
 """
@@ -10,6 +11,50 @@ A Chain of Agents Summary Generator
 import argparse
 import logging
 from pathlib import Path
+
+from litellm import completion
+
+from logger import setup_logging
+
+LITELLM_MODEL = "ollama/llama3.1:latest"
+LITELLM_BASE_URL = "http://localhost:11434"
+
+
+def generate_text_summary(model, chapter_text):
+    prompt = f"""
+    Summarize the text below, synthesizing it with the provided context.
+
+    Text:
+    {chapter_text}
+
+    Summarize the text with clarity and critical analysis, keeping it relevant to the overall text.
+
+    Do not add any headings in the response.
+
+    Do not use any markdown formatting in your response.
+
+    Write the summary from the author as the first person perspective.
+
+    Consider linking any new evidence or data to earlier arguments or unresolved questions.
+
+    Identify any key contributions, such as new theories, frameworks, or shifts in perspective, and mention practical applications or real-world implications, if relevant.
+
+    Finally, address any unanswered questions or gaps this section might highlight.
+
+    Point out any weaknesses or areas where further analysis could be valuable.
+
+    Capture the gist of any stories told by the author along with any minor by important details.
+    """
+
+    response = completion(
+        model=model,
+        messages=[{"content": prompt, "role": "user"}],
+        api_base=LITELLM_BASE_URL,
+        temperature=0.6,
+        stream=False,
+    )
+
+    return response["choices"][0]["message"]["content"]
 
 
 # Input Layer: Handles chunking and task identification
@@ -79,15 +124,17 @@ class TaskScheduler:
 
 # Worker Agent: Processes individual chunks and generates Communication Units (CU)
 class WorkerAgent:
-    def __init__(self, model):
+    def __init__(self, model, worker_id=None):
         self.model = model
+        self.worker_id = worker_id
 
     def process_chunk(self, chunk: str, previous_cu: dict = None) -> dict:
         """Process chunk and return a Communication Unit."""
         try:
-            # Here you would typically call your LLM with the chunk
-            # For now, we'll create a mock summary
-            summary = f"Summary of chunk: {chunk[:100]}..."
+            logging.info(
+                f"Worker {self.worker_id=} processing {chunk[:100]} using {self.model=}"
+            )
+            summary = generate_text_summary(self.model, chunk)
 
             communication_unit = {
                 "summary": summary,
@@ -159,25 +206,6 @@ class CLI:
             print(output)
 
 
-# Logging Layer: Handles logging at different levels
-class Logger:
-    def __init__(self, log_level: str):
-        self.log_level = log_level
-
-    def log(self, message: str, level: str = "INFO"):
-        """Log messages with specified level."""
-        if not hasattr(self, "_logger"):
-            # Configure logger
-            logging.basicConfig(
-                format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                level=getattr(logging, self.log_level.upper()),
-            )
-            self._logger = logging.getLogger("ChainOfAgents")
-
-        log_method = getattr(self._logger, level.lower())
-        log_method(message)
-
-
 # Main System Class to orchestrate the entire process
 class ChainOfAgentsSummarizationSystem:
     def __init__(self, input_chunker: InputChunker, scheduler: TaskScheduler, cli: CLI):
@@ -187,57 +215,31 @@ class ChainOfAgentsSummarizationSystem:
 
     def start(self):
         """Starts the chain-of-agents system for summarization."""
-
-        # Step 1: Get the input text from the user via the CLI
         input_text = self.cli.get_input()
 
-        # Step 2: Chunk the input text using the InputChunker
         text_chunks = self.input_chunker.chunk_input(input_text)
 
-        # Step 3: Schedule the task by passing the chunks to the TaskScheduler
+        selected_chunks = text_chunks[:10]
+
         communication_units = self.scheduler.schedule_task(
-            text_chunks
+            selected_chunks
         )  # Store the return value
 
-        # Step 4: After processing, get the final synthesized output from the manager agent
         final_output = self.scheduler.manager.synthesize_output(
             communication_units
         )  # Pass communication_units instead of text_chunks
 
-        # Step 5: Display the final output to the user via the CLI
         self.cli.display_output(final_output)
 
 
-def main():
-    # Argument parsing
-    parser = argparse.ArgumentParser(
-        description="Summarize a text file using Chain-of-Agents system."
-    )
-
-    # Required argument: Path to the input file
-    parser.add_argument(
-        "input_file", type=str, help="Path to the input text file to be summarized."
-    )
-
-    # Optional argument: Path to the output file
-    parser.add_argument(
-        "-o",
-        "--output_file",
-        type=str,
-        help="Optional path to save the summarized output.",
-    )
-
-    args = parser.parse_args()
-
-    # Read input file
-    with open(args.input_file) as file:
-        input_text = file.read()
-
+def main(args):
     # Initialize InputChunker
     input_chunker = InputChunker(context_window_size=8000)
 
-    # Initialize Worker Agents (example models, these can be real LLM instances)
-    workers = [WorkerAgent(model="LLM_1"), WorkerAgent(model="LLM_2")]
+    # Initialize workers with unique IDs
+    workers = [
+        WorkerAgent(model=LITELLM_MODEL, worker_id=f"worker_{i}") for i in range(2)
+    ]
 
     # Initialize Manager Agent
     manager = ManagerAgent(model="LLM_Manager")
@@ -246,7 +248,7 @@ def main():
     scheduler = TaskScheduler(workers=workers, manager=manager)
 
     # Initialize CLI (Pass input text directly to CLI for simplicity in this example)
-    cli = CLI(input_text=input_text, output_file=args.output_file)
+    cli = CLI(input_text=args.input_file.read_text(), output_file=args.output_file)
 
     # Initialize the Chain-of-Agents system
     system = ChainOfAgentsSummarizationSystem(
@@ -257,5 +259,35 @@ def main():
     system.start()
 
 
+def parse_args():
+    # Argument parsing
+    parser = argparse.ArgumentParser(
+        description="Summarize a text file using Chain-of-Agents system."
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        dest="verbose",
+        help="Increase verbosity of logging output",
+    )
+    # Required argument: Path to the input file
+    parser.add_argument(
+        "input_file", type=Path, help="Path to the input text file to be summarized."
+    )
+    # Optional argument: Path to the output file
+    parser.add_argument(
+        "-o",
+        "--output_file",
+        type=str,
+        help="Optional path to save the summarized output.",
+    )
+    args = parser.parse_args()
+    return args
+
+
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    setup_logging(args.verbose)
+    main(args)
