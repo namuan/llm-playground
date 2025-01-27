@@ -195,10 +195,14 @@ class ChainOfAgentsSummarizationSystem:
         text_chunks = self.input_chunker.chunk_input(input_text)
 
         # Step 3: Schedule the task by passing the chunks to the TaskScheduler
-        self.scheduler.schedule_task(text_chunks)
+        communication_units = self.scheduler.schedule_task(
+            text_chunks
+        )  # Store the return value
 
         # Step 4: After processing, get the final synthesized output from the manager agent
-        final_output = self.scheduler.manager.synthesize_output(text_chunks)
+        final_output = self.scheduler.manager.synthesize_output(
+            communication_units
+        )  # Pass communication_units instead of text_chunks
 
         # Step 5: Display the final output to the user via the CLI
         self.cli.display_output(final_output)
