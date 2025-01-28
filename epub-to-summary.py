@@ -12,7 +12,6 @@ from pathlib import Path
 from litellm import completion
 
 LITELLM_MODEL = "ollama/llama3.1:latest"
-LITELLM_BASE_URL = "http://localhost:11434"
 
 
 def load_text(file_path):
@@ -56,7 +55,6 @@ def openai_summarize_chapter(context, chapter_text):
     response = completion(
         model=LITELLM_MODEL,
         messages=[{"content": prompt, "role": "user"}],
-        api_base=LITELLM_BASE_URL,
         temperature=0.6,
         stream=False,
     )
