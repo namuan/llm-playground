@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtWidgets import QVBoxLayout
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
 
 
 def get_response_data():
@@ -172,6 +173,9 @@ class Notechat(QMainWindow):
         layout.addWidget(self.create_chat_area())
         layout.addWidget(self.create_input_area())
 
+        # Focus on input
+        self.text_input.setFocus()
+
     def build_assistant_widget(self):
         assistant_widget = QWidget()
         assistant_widget.setStyleSheet("background-color: white; border-radius: 10px;")
@@ -248,13 +252,23 @@ class Notechat(QMainWindow):
             self.text_input.clear()
 
             # Schedule scroll to bottom
-            QTimer.singleShot(100, self.scroll_to_bottom)
+            QTimer.singleShot(200, self.scroll_to_bottom)
 
     def scroll_to_bottom(self):
         scroll_area = self.findChild(QScrollArea)
         if scroll_area:
+            QApplication.processEvents()
             vertical_bar = scroll_area.verticalScrollBar()
-            vertical_bar.setValue(vertical_bar.maximum())
+            current = vertical_bar.value()
+            maximum = vertical_bar.maximum()
+            animation = QPropertyAnimation(vertical_bar, b"value")
+            animation.setDuration(400)
+            animation.setStartValue(current)
+            animation.setEndValue(maximum)
+            animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+            animation.start()
+            # Keep reference to prevent garbage collection
+            self._animation = animation
 
 
 def main():
