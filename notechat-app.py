@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import QPushButton
 from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtWidgets import QVBoxLayout
 from PyQt6.QtWidgets import QWidget
+from PyQt6.QtCore import QTimer
 
 
 def get_response_data():
@@ -245,6 +246,15 @@ class Notechat(QMainWindow):
 
             # Clear input field
             self.text_input.clear()
+
+            # Schedule scroll to bottom
+            QTimer.singleShot(100, self.scroll_to_bottom)
+
+    def scroll_to_bottom(self):
+        scroll_area = self.findChild(QScrollArea)
+        if scroll_area:
+            vertical_bar = scroll_area.verticalScrollBar()
+            vertical_bar.setValue(vertical_bar.maximum())
 
 
 def main():
