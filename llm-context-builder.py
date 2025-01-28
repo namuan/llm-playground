@@ -7,13 +7,16 @@ Usage:
 python3 llm-context-builder.py --extensions .json .py --ignored_dirs build dist --print_contents > context.py
 python3 llm-context-builder.py --github_url https://github.com/motion-canvas/motion-canvas/tree/main/packages/docs/docs --extensions .md .mdx  --print_contents > motion-canvas.md
 """
+
 import logging
 import os
 import shutil
 import tempfile
 import urllib.request
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
-from urllib.parse import urljoin, urlparse
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
+from urllib.parse import urljoin
+from urllib.parse import urlparse
 from zipfile import ZipFile
 
 from logger import setup_logging

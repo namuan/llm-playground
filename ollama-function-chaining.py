@@ -14,11 +14,14 @@ Usage:
 ./ollama-function-chaining.py -v # To log INFO messages
 ./ollama-function-chaining.py -vv # To log DEBUG messages
 """
+
 import json
 import logging
 import random
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
-from typing import Dict, List
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
+from typing import Dict
+from typing import List
 
 import ollama
 from pydantic import BaseModel

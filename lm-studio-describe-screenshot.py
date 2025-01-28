@@ -17,15 +17,19 @@ Dependencies:
 - Pillow
 - pydantic
 """
+
 import base64
 import io
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
 from pathlib import Path
-from typing import Annotated, List
+from typing import Annotated
+from typing import List
 
-from PIL import Image
 from openai import OpenAI
-from pydantic import BaseModel, Field
+from PIL import Image
+from pydantic import BaseModel
+from pydantic import Field
 from pydantic.types import StringConstraints
 
 

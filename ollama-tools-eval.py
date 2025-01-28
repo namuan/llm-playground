@@ -9,11 +9,15 @@ Usage:
 ./ollama-tools-eval.py -vv # To log DEBUG messages
 ./ollama-tools-eval.py -m llama2:13b # To specify a different model
 """
+
 import inspect
 import json
 import logging
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
-from typing import Any, Callable, Dict
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
+from typing import Any
+from typing import Callable
+from typing import Dict
 
 import ollama
 
@@ -61,13 +65,13 @@ def generate_tool_definition(func: Callable) -> Dict[str, Any]:
     for param_name, param in sig.parameters.items():
         param_type = "string"  # Default to string if type hint is not available
         if param.annotation != inspect.Parameter.empty:
-            if param.annotation == str:
+            if param.annotation is str:
                 param_type = "string"
-            elif param.annotation == int:
+            elif param.annotation is int:
                 param_type = "integer"
-            elif param.annotation == float:
+            elif param.annotation is float:
                 param_type = "number"
-            elif param.annotation == bool:
+            elif param.annotation is bool:
                 param_type = "boolean"
             # Add more type mappings as needed
 

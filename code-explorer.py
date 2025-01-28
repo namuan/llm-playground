@@ -9,9 +9,18 @@
 # ///
 from pathlib import Path
 
+from langchain import hub
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationSummaryMemory
 from langchain.text_splitter import Language
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_chroma import Chroma
 from langchain_community.document_loaders.generic import GenericLoader
-from langchain_community.document_loaders.parsers.language.language_parser import LanguageParser
+from langchain_community.document_loaders.parsers.language.language_parser import (
+    LanguageParser,
+)
+from langchain_ollama import ChatOllama
+from langchain_ollama import OllamaEmbeddings
 
 repo_path = Path.home() / "code-reference" / "spring-petclinic-microservices"
 
@@ -25,16 +34,11 @@ loader = GenericLoader.from_filesystem(
 documents = loader.load()
 print(f"Total documents found: {len(documents)}")
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-
 code_splitter = RecursiveCharacterTextSplitter.from_language(
     language=Language.JAVA, chunk_size=2000, chunk_overlap=200
 )
 
 texts = code_splitter.split_documents(documents)
-
-from langchain_ollama import OllamaEmbeddings
-from langchain_chroma import Chroma
 
 DB_DIRECTORY = Path.cwd() / "target"
 embedding_provider = OllamaEmbeddings(model="nomic-embed-text:latest")
@@ -52,11 +56,6 @@ retriever = db.as_retriever(
     search_kwargs={"k": 8},
 )
 
-from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationSummaryMemory
-from langchain_ollama import ChatOllama
-
-from langchain import hub
 prompt = hub.pull("rlm/rag-prompt")
 
 example_messages = prompt.invoke(

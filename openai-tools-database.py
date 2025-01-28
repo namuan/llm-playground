@@ -3,16 +3,20 @@
 Playing with OpenAI tools and function to call database
 https://cookbook.openai.com/examples/how_to_call_functions_with_chat_models
 """
+
 import json
 import os
 import sqlite3
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
 from pathlib import Path
 
 import openai
 import requests
 from dotenv import load_dotenv
-from tenacity import retry, stop_after_attempt, wait_random_exponential
+from tenacity import retry
+from tenacity import stop_after_attempt
+from tenacity import wait_random_exponential
 from termcolor import colored
 
 from logger import setup_logging

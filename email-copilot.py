@@ -11,13 +11,18 @@
 # ///
 import base64
 import os
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
 
 import dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import Resource, build
+from googleapiclient.discovery import build
+from googleapiclient.discovery import Resource
 from litellm import completion
 
 dotenv.load_dotenv()

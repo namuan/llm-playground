@@ -3,12 +3,16 @@
 Playing with OpenAI tools and function
 https://cookbook.openai.com/examples/how_to_call_functions_with_chat_models
 """
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
+
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
 
 from dotenv import load_dotenv
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessage
-from tenacity import retry, stop_after_attempt, wait_random_exponential
+from tenacity import retry
+from tenacity import stop_after_attempt
+from tenacity import wait_random_exponential
 from termcolor import colored
 
 from logger import setup_logging

@@ -9,9 +9,10 @@
 import argparse
 
 import torch
-from transformers import AutoModelForCausalLM, AutoProcessor
-
-from tinyclick_utils import postprocess, prepare_inputs
+from tinyclick_utils import postprocess
+from tinyclick_utils import prepare_inputs
+from transformers import AutoModelForCausalLM
+from transformers import AutoProcessor
 
 
 def main():

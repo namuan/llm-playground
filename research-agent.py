@@ -16,8 +16,10 @@ Usage:
 ./research-agent.py -q QUESTION -f MARKDOWN_FILE
 ./research-agent.py -q "What is the best way to learn programming?" -f output.md
 """
+
 import argparse
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
 from pathlib import Path
 
 import litellm

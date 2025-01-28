@@ -30,12 +30,14 @@ Outputs:
 - A fully formatted text file for the EPUB book.
 - Audio files for individual chapters and a combined podcast file.
 """
+
 import ast
 import logging
 import os
 import pickle
 import warnings
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
 from collections import OrderedDict
 from pathlib import Path
 
@@ -45,7 +47,8 @@ import soundfile as sf
 from bs4 import BeautifulSoup
 from ebooklib import epub
 from kokoro_onnx import Kokoro
-from mlx_lm import generate, load
+from mlx_lm import generate
+from mlx_lm import load
 from more_itertools import partition
 from slugify import slugify
 

@@ -18,25 +18,36 @@ Usage:
 ./haystack_ollama_playground.py -v # To log INFO messages
 ./haystack_ollama_playground.py -vv # To log DEBUG messages
 """
+
 import logging
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
 from pathlib import Path
 
-from haystack import Document, Pipeline
+from haystack import Document
+from haystack import Pipeline
 from haystack.components.builders.prompt_builder import PromptBuilder
-from haystack.components.retrievers.in_memory import InMemoryBM25Retriever, InMemoryEmbeddingRetriever
+from haystack.components.retrievers.in_memory import InMemoryBM25Retriever
+from haystack.components.retrievers.in_memory import InMemoryEmbeddingRetriever
 from haystack.dataclasses import ChatMessage
 from haystack.document_stores.in_memory import InMemoryDocumentStore
-from haystack_integrations.components.embedders.ollama.document_embedder import OllamaDocumentEmbedder
-from haystack_integrations.components.embedders.ollama.text_embedder import OllamaTextEmbedder
-from haystack_integrations.components.generators.ollama import OllamaChatGenerator, OllamaGenerator
+from haystack_integrations.components.embedders.ollama.document_embedder import (
+    OllamaDocumentEmbedder,
+)
+from haystack_integrations.components.embedders.ollama.text_embedder import (
+    OllamaTextEmbedder,
+)
+from haystack_integrations.components.generators.ollama import OllamaChatGenerator
+from haystack_integrations.components.generators.ollama import OllamaGenerator
 from haystack_integrations.document_stores.chroma import ChromaDocumentStore
 
 from logger import setup_logging
 
 
 def parse_args():
-    parser = ArgumentParser(description=__doc__, formatter_class=RawDescriptionHelpFormatter)
+    parser = ArgumentParser(
+        description=__doc__, formatter_class=RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "-v",
         "--verbose",
@@ -63,7 +74,9 @@ def parse_args():
 def run_generation_example():
     print("------ Running generation example")
     # document_store = InMemoryDocumentStore()
-    document_store = ChromaDocumentStore(persist_path=Path.cwd().joinpath("target").as_posix())
+    document_store = ChromaDocumentStore(
+        persist_path=Path.cwd().joinpath("target").as_posix()
+    )
     document_store.write_documents(
         [
             Document(content="Super Mario was an important politician"),
@@ -72,7 +85,7 @@ def run_generation_example():
             ),
             Document(
                 content="Super Mario was a successful military leader who fought off several invasion attempts by "
-                        "his arch rival - Bowser"
+                "his arch rival - Bowser"
             ),
         ]
     )
@@ -90,14 +103,18 @@ def run_generation_example():
     """
 
     pipe = Pipeline()
-    pipe.add_component("retriever", InMemoryBM25Retriever(document_store=document_store))
+    pipe.add_component(
+        "retriever", InMemoryBM25Retriever(document_store=document_store)
+    )
     pipe.add_component("prompt_builder", PromptBuilder(template=template))
     pipe.add_component("llm", OllamaGenerator(model=OLLAMA_MODEL, url=OLLAMA_URL))
     pipe.connect("retriever", "prompt_builder.documents")
     pipe.connect("prompt_builder", "llm")
 
     query = "Who is Super Mario?"
-    response = pipe.run({"prompt_builder": {"query": query}, "retriever": {"query": query}})
+    response = pipe.run(
+        {"prompt_builder": {"query": query}, "retriever": {"query": query}}
+    )
     print(f"Generation response: {response['llm']['replies']}")
 
 
@@ -132,7 +149,9 @@ def run_embedding_example():
 
     query_pipeline = Pipeline()
     query_pipeline.add_component("text_embedder", OllamaTextEmbedder())
-    query_pipeline.add_component("retriever", InMemoryEmbeddingRetriever(document_store=document_store))
+    query_pipeline.add_component(
+        "retriever", InMemoryEmbeddingRetriever(document_store=document_store)
+    )
     query_pipeline.connect("text_embedder.embedding", "retriever.query_embedding")
 
     query = "Who lives in Berlin?"

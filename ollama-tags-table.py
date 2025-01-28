@@ -17,6 +17,7 @@ Output format:
 |--------|------|---------|
 | model1 👉 model2 | 1.2GB | abc123... |
 """
+
 import argparse
 import re
 from collections import defaultdict

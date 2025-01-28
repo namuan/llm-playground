@@ -3,6 +3,7 @@
 Playing with OpenAI tools and function to call database
 https://cookbook.openai.com/examples/how_to_call_functions_for_knowledge_retrieval
 """
+
 import ast
 import os
 from csv import writer
@@ -15,7 +16,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from pypdf import PdfReader
 from scipy import spatial
-from tenacity import retry, stop_after_attempt, wait_random_exponential
+from tenacity import retry
+from tenacity import stop_after_attempt
+from tenacity import wait_random_exponential
 
 load_dotenv()
 
@@ -161,7 +164,7 @@ def summarize_text(query):
     print(f"Chunking text from {pdf_file_path}")
     pdf_text = read_pdf(pdf_file_path)
     pdf_text_chunks = create_chunks(pdf_text, 1500)
-    print(f"Fetching summary for chunks")
+    print("Fetching summary for chunks")
     summary_results = ""
     text_chunks = [tokenizer.decode(chunk) for chunk in pdf_text_chunks]
     for chunk in text_chunks:

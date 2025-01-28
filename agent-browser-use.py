@@ -17,10 +17,13 @@ Usage:
 ./agent-browser-use.py -vv # To log DEBUG messages
 ./agent-browser-use.py --model mistral # To specify a different model
 """
+
 import asyncio
 import logging
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
-from datetime import datetime, timedelta
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
+from datetime import datetime
+from datetime import timedelta
 
 from browser_use import Agent
 from langchain_ollama import ChatOllama

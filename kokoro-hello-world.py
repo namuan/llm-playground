@@ -24,9 +24,11 @@ Usage:
 ./kokoro-hello-world.py -v ...  # Run with INFO logging
 ./kokoro-hello-world.py -vv ...  # Run with DEBUG logging
 """
+
 import asyncio
 import logging
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
 from pathlib import Path
 
 import sounddevice as sd

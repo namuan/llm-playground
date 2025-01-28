@@ -8,6 +8,7 @@
 """
 A Chain of Agents Summary Generator
 """
+
 import argparse
 from pathlib import Path
 

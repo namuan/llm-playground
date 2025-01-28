@@ -4,9 +4,12 @@
 #   "smolagents",
 # ]
 # ///
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
 
-from smolagents import CodeAgent, DuckDuckGoSearchTool, LiteLLMModel
+from smolagents import CodeAgent
+from smolagents import DuckDuckGoSearchTool
+from smolagents import LiteLLMModel
 
 from logger import setup_logging
 
@@ -31,8 +34,8 @@ def main(args):
         tools=[DuckDuckGoSearchTool()],
         model=LiteLLMModel(
             model_id="ollama_chat/qwen2.5-coder:14b",
-            api_base="http://localhost:11434", # replace with remote open-ai compatible server if necessary
-            api_key="your-api-key" # replace with API key if necessary
+            api_base="http://localhost:11434",  # replace with remote open-ai compatible server if necessary
+            api_key="your-api-key",  # replace with API key if necessary
         ),
     )
     agent.run(

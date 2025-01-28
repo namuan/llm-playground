@@ -16,12 +16,10 @@ import os
 
 import gradio as gr
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import (
-    Docx2txtLoader,
-    PyPDFLoader,
-    TextLoader,
-    YoutubeLoader,
-)
+from langchain_community.document_loaders import Docx2txtLoader
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import TextLoader
+from langchain_community.document_loaders import YoutubeLoader
 from langchain_community.vectorstores import Chroma
 from langchain_ollama import OllamaEmbeddings
 from openai import OpenAI
@@ -99,7 +97,6 @@ def indexing(mode, url):
     global vectorstore
 
     try:
-
         if mode == "Files (docx, pdf, txt)":
             if url.endswith(".pdf"):
                 loader = PyPDFLoader(url)
@@ -140,7 +137,6 @@ def chatbot(query, history, model_name, temp, max_tokens, freq_penalty, k_docs):
     global chat_history, sys_prompt
 
     if "vectorstore" in globals() and vectorstore is not None:
-
         if len(history) == 0:
             chat_history = []
             docs = vectorstore.similarity_search(query, k=k_docs)
@@ -293,5 +289,5 @@ def main():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Chat with Ollama")
-    parser.add_argument("--version", action="version", version=f"Chat with Ollama")
+    parser.add_argument("--version", action="version", version="Chat with Ollama")
     main()

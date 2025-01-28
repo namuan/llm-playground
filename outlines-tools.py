@@ -2,13 +2,17 @@
 """
 Ollama with functions using outline framework
 """
+
 import json
-from typing import Callable, Dict, List
+from typing import Callable
+from typing import Dict
+from typing import List
 
 import outlines
 import requests
 import rich
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from pydantic import Field
 
 
 def generate_full_completion(model: str, prompt: str, **kwargs) -> dict[str, str]:

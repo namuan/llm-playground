@@ -1,4 +1,5 @@
 from litellm import completion
+from openai import OpenAI
 
 print("Using LangChain with Ollama directly")
 
@@ -14,8 +15,6 @@ for chunk in ollama_response:
 
 print("")
 print("Using OpenAI connecting to Ollama via LiteLLM Proxy")
-
-from openai import OpenAI
 
 client = OpenAI(base_url="http://0.0.0.0:8000")
 

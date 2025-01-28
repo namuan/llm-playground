@@ -1,9 +1,9 @@
-from openai import OpenAI
-
-client = OpenAI()
 import typer
+from openai import OpenAI
 from rich import print
 from rich.table import Table
+
+client = OpenAI()
 
 
 def main():

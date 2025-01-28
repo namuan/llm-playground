@@ -4,7 +4,6 @@ from add import add_numbers
 
 
 class TestAddNumbersFunction(unittest.TestCase):
-
     def test_positive_numbers(self):
         self.assertEqual(add_numbers(5, 7), 12)
 

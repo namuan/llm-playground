@@ -7,8 +7,10 @@ Usage:
 
 $ python3 ollama-model-eval.py --question "Show me the git command to revert the changes from the last two git commits"
 """
+
 import json
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
 
 import requests
 

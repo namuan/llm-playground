@@ -8,7 +8,8 @@
 from typing import Literal
 
 import ollama
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
+from pydantic import ValidationError
 
 
 # Build a schema for the evaluation

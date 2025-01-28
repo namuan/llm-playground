@@ -5,7 +5,8 @@
 # ]
 # ///
 import os
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from argparse import ArgumentParser
+from argparse import RawDescriptionHelpFormatter
 
 import litellm
 
@@ -54,6 +55,7 @@ models_to_try = [
     "gryphe/mythomax-l2-13b:free",
 ]
 
+
 def main(args):
     ork = os.getenv("OPENROUTER_API_KEY")
 
@@ -65,14 +67,13 @@ def main(args):
             api_base="https://openrouter.ai/api/v1",
             api_key=ork,
         )
-        if hasattr(response, 'choices'):
+        if hasattr(response, "choices"):
             print(response)
             break  # Exit the loop if successful
 
-        if hasattr(response, 'error') and response.error.get('code') == 429:
+        if hasattr(response, "error") and response.error.get("code") == 429:
             print(f"Error with {model=}")
             continue  # Try the next model
-
 
 
 if __name__ == "__main__":

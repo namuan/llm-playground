@@ -14,21 +14,22 @@ import sys
 import pyautogui
 import torch
 from PIL import ImageGrab
-from PyQt5.QtCore import QPoint, QUrl
-from PyQt5.QtGui import QColor, QPalette
+from PyQt5.QtCore import QPoint
+from PyQt5.QtCore import QUrl
+from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QPalette
 from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtWidgets import (
-    QApplication,
-    QFrame,
-    QHBoxLayout,
-    QLineEdit,
-    QMainWindow,
-    QVBoxLayout,
-    QWidget,
-)
-from transformers import AutoModelForCausalLM, AutoProcessor
-
-from tinyclick_utils import postprocess, prepare_inputs
+from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QFrame
+from PyQt5.QtWidgets import QHBoxLayout
+from PyQt5.QtWidgets import QLineEdit
+from PyQt5.QtWidgets import QMainWindow
+from PyQt5.QtWidgets import QVBoxLayout
+from PyQt5.QtWidgets import QWidget
+from tinyclick_utils import postprocess
+from tinyclick_utils import prepare_inputs
+from transformers import AutoModelForCausalLM
+from transformers import AutoProcessor
 
 
 class BrowserWindow(QMainWindow):

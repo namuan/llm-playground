@@ -18,7 +18,8 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List
+from typing import Optional
 
 from litellm import completion
 
