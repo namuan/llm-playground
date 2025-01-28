@@ -18,6 +18,43 @@ from PyQt6.QtWidgets import QVBoxLayout
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import QTimer
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import pyqtSignal
+
+
+# Add this new class after the imports
+class StreamingLabel(QLabel):
+    finished = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self.setWordWrap(True)
+        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.full_text = ""
+        self.current_position = 0
+        self.words = []
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.add_word)
+
+    def stream_text(self, text, interval=50):
+        self.full_text = text
+        self.current_position = 0
+        self.words = text.split()
+        self.setText("")
+        self.timer.start(interval)
+
+    def add_word(self):
+        if self.current_position < len(self.words):
+            current_text = self.text()
+            new_text = (
+                current_text
+                + (" " if current_text else "")
+                + self.words[self.current_position]
+            )
+            self.setText(new_text)
+            self.current_position += 1
+        else:
+            self.timer.stop()
+            self.finished.emit()
 
 
 def get_response_data():
@@ -194,16 +231,15 @@ class Notechat(QMainWindow):
         # Get response data
         response_data = get_response_data()
 
-        response_text = QLabel(response_data["response"])
-        response_text.setWordWrap(True)
-        response_text.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        # Use StreamingLabel instead of QLabel
+        response_text = StreamingLabel()
+        response_text.finished.connect(self.on_streaming_finished)
 
         # Note collections
         collections = QWidget()
         collections_layout = QHBoxLayout(collections)
         collections_layout.setSpacing(10)
+        collections.hide()  # Hide initially
 
         for note_data in response_data["collections"]:
             note = QLabel(f"📝 {note_data['title']}  {note_data['date']}")
@@ -214,6 +250,12 @@ class Notechat(QMainWindow):
         assistant_layout.addWidget(header)
         assistant_layout.addWidget(response_text)
         assistant_layout.addWidget(collections)
+
+        # Start streaming
+        response_text.stream_text(response_data["response"])
+
+        # Store collections widget reference
+        response_text.collections_widget = collections
 
         return assistant_widget
 
@@ -247,11 +289,6 @@ class Notechat(QMainWindow):
             self.chat_layout.insertWidget(
                 self.chat_layout.count() - 1, assistant_widget
             )
-
-            # Clear input field
-            self.text_input.clear()
-
-            # Schedule scroll to bottom
             QTimer.singleShot(200, self.scroll_to_bottom)
 
     def scroll_to_bottom(self):
@@ -269,6 +306,15 @@ class Notechat(QMainWindow):
             animation.start()
             # Keep reference to prevent garbage collection
             self._animation = animation
+
+    def on_streaming_finished(self):
+        # Show collections after streaming is complete
+        streaming_label = self.sender()
+        streaming_label.collections_widget.show()
+        # Schedule scroll to bottom
+        QTimer.singleShot(200, self.scroll_to_bottom)
+        # Clear input field
+        self.text_input.clear()
 
 
 def main():
