@@ -217,7 +217,17 @@ class Notechat(QMainWindow):
         icon_label.setFixedSize(20, 20)
         icon_label.setStyleSheet("background-color: #FFD700; border-radius: 5px;")
 
+        # Add progress status label
+        self.progress_label = QLabel()
+        self.progress_label.setStyleSheet("""
+            padding: 2px 8px;
+            color: #666;
+            font-size: 12px;
+        """)
+        self.progress_label.hide()  # Initially hidden
+
         title_layout.addWidget(icon_label)
+        title_layout.addWidget(self.progress_label)
         title_layout.addStretch()
 
         extract_button = QPushButton("Extract Notes")
@@ -268,9 +278,12 @@ class Notechat(QMainWindow):
     def handle_note(self, note: dict):
         self.extracted_notes.append(note)
 
-    def update_progress(self, total: int): ...
+    def update_progress(self, total: int):
+        self.progress_label.show()
+        self.progress_label.setText(f"Processing {total} notes ...")
 
     def extraction_finished(self):
+        self.progress_label.hide()
         self.handle_extracted_notes(self.extracted_notes)
 
     def handle_error(self, error_msg: str):
