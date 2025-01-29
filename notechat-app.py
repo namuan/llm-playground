@@ -2,19 +2,19 @@
 # /// script
 # dependencies = [
 #   "PyQt6",
+#   "chromadb",
 # ]
 # ///
-
 import secrets
 import subprocess
 import sys
+from pathlib import Path
 from typing import Dict, List
-
+from PyQt6.QtCore import QThread, pyqtSignal
+import chromadb
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QObject
-from PyQt6.QtCore import QThread
 from PyQt6.QtCore import QTimer
 from PyQt6.QtCore import Qt
-from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtWidgets import QHBoxLayout
 from PyQt6.QtWidgets import QLabel
@@ -27,6 +27,8 @@ from PyQt6.QtWidgets import QPushButton
 from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtWidgets import QVBoxLayout
 from PyQt6.QtWidgets import QWidget
+
+EMBEDDINGS_PATH = Path.home() / ".cache" / "notechat" / "embeddings"
 
 EXTRACT_SCRIPT = """
 tell application "Notes"
@@ -107,9 +109,47 @@ def get_response_data():
     }
 
 
+class EmbeddingsWorker(QThread):
+    progress_signal = pyqtSignal(str)  # Define at class level
+
+    def __init__(self, notes):
+        super().__init__()
+        self.notes = notes
+
+    def run(self):
+        try:
+            self.progress_signal.emit("Creating embeddings...")
+            client = chromadb.PersistentClient(path=EMBEDDINGS_PATH.as_posix())
+
+            collection = client.get_or_create_collection(
+                name="notes_collection",
+            )
+
+            # Prepare data for adding to collection
+            ids = [note["id"] for note in self.notes]
+            documents = [note["body"] for note in self.notes]
+            metadatas = [
+                {
+                    "title": note["title"],
+                    "created": note["created"],
+                    "updated": note["updated"],
+                    "folder": note["folder"],
+                }
+                for note in self.notes
+            ]
+
+            # Add items to collection
+            collection.add(ids=ids, documents=documents, metadatas=metadatas)
+
+            self.progress_signal.emit("Embeddings created successfully!")
+
+        except Exception as e:
+            self.progress_signal.emit(f"Error creating embeddings: {str(e)}")
+
+
 class NotesExtractorWorker(QThread):
-    progress_signal = pyqtSignal(int)  # total notes count
-    note_extracted = pyqtSignal(dict)  # extracted note data
+    progress_signal = pyqtSignal(str)
+    note_extracted = pyqtSignal(dict)
     error = pyqtSignal(str)
 
     def __init__(self):
@@ -128,7 +168,7 @@ class NotesExtractorWorker(QThread):
                     ],
                 ).strip()
             )
-            self.progress_signal.emit(total_notes)
+            self.progress_signal.emit(f"Processing {total_notes} notes ...")
 
             # Start extraction process
             process = subprocess.Popen(
@@ -171,7 +211,7 @@ class NotesExtractorWorker(QThread):
 
 
 class NotesExtractor(QObject):
-    progress_signal = pyqtSignal(int)
+    progress_signal = pyqtSignal(str)
     note_extracted = pyqtSignal(dict)
     finished = pyqtSignal()
     error = pyqtSignal(str)
@@ -264,7 +304,7 @@ class Notechat(QMainWindow):
         self.extractor = NotesExtractor()
 
         # Connect signals
-        self.extractor.progress_signal.connect(self.update_progress)
+        self.extractor.progress_signal.connect(self.update_progress_message)
         self.extractor.note_extracted.connect(self.handle_note)
         self.extractor.error.connect(self.handle_error)
         self.extractor.finished.connect(self.extraction_finished)
@@ -278,9 +318,9 @@ class Notechat(QMainWindow):
     def handle_note(self, note: dict):
         self.extracted_notes.append(note)
 
-    def update_progress(self, total: int):
+    def update_progress_message(self, message: str):
         self.progress_label.show()
-        self.progress_label.setText(f"Processing {total} notes ...")
+        self.progress_label.setText(message)
 
     def extraction_finished(self):
         self.progress_label.hide()
@@ -291,7 +331,6 @@ class Notechat(QMainWindow):
 
     def handle_extracted_notes(self, notes: List[Dict[str, str]]):
         message = f"Extracted {len(notes)} notes successfully!"
-
         # Add system message to chat
         system_widget = QLabel(message)
         system_widget.setStyleSheet("""
@@ -300,6 +339,8 @@ class Notechat(QMainWindow):
             border-radius: 5px;
         """)
         self.chat_layout.insertWidget(self.chat_layout.count() - 1, system_widget)
+
+        self.prepare_embeddings(notes)
 
     def create_chat_area(self):
         chat_widget = QWidget()
@@ -493,6 +534,11 @@ class Notechat(QMainWindow):
         QTimer.singleShot(200, self.scroll_to_bottom)
         # Clear input field
         self.text_input.clear()
+
+    def prepare_embeddings(self, notes: List[Dict[str, str]]):
+        self.embeddings_worker = EmbeddingsWorker(notes)
+        self.embeddings_worker.progress_signal.connect(self.update_progress_message)
+        self.embeddings_worker.start()
 
 
 def main():
