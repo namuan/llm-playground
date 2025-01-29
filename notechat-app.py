@@ -16,15 +16,13 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtCore import Qt
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtWidgets import (
-    QDialog,
-    QProgressBar,
-    QMessageBox,
-)
 from PyQt6.QtWidgets import QHBoxLayout
 from PyQt6.QtWidgets import QLabel
 from PyQt6.QtWidgets import QLineEdit
 from PyQt6.QtWidgets import QMainWindow
+from PyQt6.QtWidgets import (
+    QMessageBox,
+)
 from PyQt6.QtWidgets import QPushButton
 from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtWidgets import QVBoxLayout
@@ -196,77 +194,13 @@ class NotesExtractor(QObject):
         self.worker.requestInterruption()
 
 
-class ExtractionDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.init_ui()
-        self.extracted_notes = []
-        self.extractor = None
-
-    def init_ui(self):
-        self.setWindowTitle("Extracting Notes")
-        self.setModal(True)
-        self.setMinimumWidth(400)
-
-        layout = QVBoxLayout(self)
-
-        # Progress section
-        progress_group = QWidget()
-        progress_layout = QVBoxLayout(progress_group)
-
-        self.status_label = QLabel("Preparing to extract notes...")
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setTextVisible(True)
-
-        progress_layout.addWidget(self.status_label)
-        progress_layout.addWidget(self.progress_bar)
-
-        # Notes counter
-        self.counter_label = QLabel("Notes extracted: 0")
-
-        # Buttons
-        button_box = QHBoxLayout()
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.clicked.connect(self.reject)
-        button_box.addWidget(self.cancel_button)
-
-        layout.addWidget(progress_group)
-        layout.addWidget(self.counter_label)
-        layout.addLayout(button_box)
-
-    def reject(self):
-        if self.extractor:
-            self.extractor.stop_extraction()
-        super().reject()
-
-    def start_extraction(self):
-        self.extractor = NotesExtractor()
-
-        # Connect signals
-        self.extractor.progress_signal.connect(self.update_progress)
-        self.extractor.note_extracted.connect(self.handle_note)
-        self.extractor.error.connect(self.handle_error)
-        self.extractor.finished.connect(self.accept)
-
-        # Start extraction
-        self.extractor.start_extraction()
-
-    def update_progress(self, total: int):
-        self.status_label.setText(f"Extracting {total} notes...")
-
-    def handle_note(self, note: dict):
-        self.extracted_notes.append(note)
-
-    def handle_error(self, error_msg: str):
-        QMessageBox.critical(self, "Error", f"Error extracting notes: {error_msg}")
-        self.reject()
-
-
 class Notechat(QMainWindow):
     def __init__(self):
         super().__init__()
         self.chat_layout = None
         self.text_input = None
+        self.extracted_notes = []
+        self.extractor = self.setup_extractor()
         self.init_ui()
 
     def create_title_bar(self):
@@ -286,11 +220,6 @@ class Notechat(QMainWindow):
         title_layout.addWidget(icon_label)
         title_layout.addStretch()
 
-        # Create status widget
-        status_widget = QWidget()
-        status_layout = QHBoxLayout(status_widget)
-        status_layout.setContentsMargins(0, 0, 0, 0)
-
         extract_button = QPushButton("Extract Notes")
         extract_button.setStyleSheet("""
             QPushButton {
@@ -303,17 +232,16 @@ class Notechat(QMainWindow):
         """)
         extract_button.clicked.connect(self.handle_extraction)
 
-        local_label = QLabel("Local")
-        local_label.setStyleSheet(
-            "background-color: white; padding: 5px 10px; border-radius: 15px;"
-        )
+        # Create status widget
+        status_widget = QWidget()
+        status_layout = QHBoxLayout(status_widget)
+        status_layout.setContentsMargins(0, 0, 0, 0)
 
         active_label = QLabel("Active")
         active_label.setStyleSheet(
             "background-color: #2ECC71; color: white; padding: 5px 10px; border-radius: 15px;"
         )
 
-        status_layout.addWidget(local_label)
         status_layout.addWidget(active_label)
 
         title_bar_layout.addWidget(title_widget)
@@ -322,12 +250,31 @@ class Notechat(QMainWindow):
 
         return title_bar
 
-    def handle_extraction(self):
-        dialog = ExtractionDialog(self)
-        dialog.start_extraction()
+    def setup_extractor(self):
+        self.extractor = NotesExtractor()
 
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.handle_extracted_notes(dialog.extracted_notes)
+        # Connect signals
+        self.extractor.progress_signal.connect(self.update_progress)
+        self.extractor.note_extracted.connect(self.handle_note)
+        self.extractor.error.connect(self.handle_error)
+        self.extractor.finished.connect(self.extraction_finished)
+
+        return self.extractor
+
+    def handle_extraction(self):
+        # Start extraction
+        self.extractor.start_extraction()
+
+    def handle_note(self, note: dict):
+        self.extracted_notes.append(note)
+
+    def update_progress(self, total: int): ...
+
+    def extraction_finished(self):
+        self.handle_extracted_notes(self.extracted_notes)
+
+    def handle_error(self, error_msg: str):
+        QMessageBox.critical(self, "Error", f"Error extracting notes: {error_msg}")
 
     def handle_extracted_notes(self, notes: List[Dict[str, str]]):
         message = f"Extracted {len(notes)} notes successfully!"
