@@ -109,7 +109,7 @@ def get_response_data():
 
 
 class NotesExtractor(QObject):
-    progress_signal = pyqtSignal(int, int)  # current, total
+    progress_signal = pyqtSignal(int)  # current, total
     note_extracted = pyqtSignal(dict)  # extracted note data
     finished = pyqtSignal()
     error = pyqtSignal(str)
@@ -149,6 +149,8 @@ class NotesExtractor(QObject):
                 ).strip()
             )
 
+            self.progress_signal.emit(total_notes)
+
             note: Dict[str, str] = {}
             body: List[str] = []
             note_count = 0
@@ -160,7 +162,6 @@ class NotesExtractor(QObject):
                     if note.get("id"):
                         note["body"] = "\n".join(body).strip()
                         note_count += 1
-                        self.progress_signal.emit(note_count, total_notes)
                         self.note_extracted.emit(note)
                         yield note
                     note, body = {}, []
@@ -220,11 +221,8 @@ class ExtractionDialog(QDialog):
         layout.addWidget(self.counter_label)
         layout.addLayout(button_box)
 
-    def update_progress(self, current: int, total: int):
-        percentage = int((current / total) * 100)
-        self.progress_bar.setValue(percentage)
-        self.status_label.setText(f"Extracting notes... ({current}/{total})")
-        self.counter_label.setText(f"Notes extracted: {current}")
+    def update_progress(self, total: int):
+        self.status_label.setText(f"Extracting {total} notes...")
 
     def handle_note(self, note: dict):
         self.extracted_notes.append(note)
