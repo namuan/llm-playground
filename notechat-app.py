@@ -7,7 +7,7 @@
 import secrets
 import subprocess
 import sys
-from typing import Dict, List, Generator
+from typing import Dict, List
 
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QObject
 from PyQt6.QtCore import QThread
@@ -117,7 +117,7 @@ class NotesExtractor(QObject):
     def __init__(self):
         super().__init__()
         self.thread = QThread()
-        self.thread.started.connect(self._run_extraction)
+        self.thread.started.connect(self.extract_notes)
         self.finished.connect(self.thread.quit)
         self.thread.finished.connect(self.thread.deleteLater)
         self.moveToThread(self.thread)
@@ -125,11 +125,7 @@ class NotesExtractor(QObject):
     def start_extraction(self):
         self.thread.start()
 
-    def _run_extraction(self):
-        for _ in self.extract_notes():
-            pass
-
-    def extract_notes(self) -> Generator[Dict[str, str], None, None]:
+    def extract_notes(self):
         try:
             split = secrets.token_hex(8)
             process = subprocess.Popen(
@@ -153,7 +149,6 @@ class NotesExtractor(QObject):
 
             note: Dict[str, str] = {}
             body: List[str] = []
-            note_count = 0
 
             for line in process.stdout:
                 line = line.decode("mac_roman").strip()
@@ -161,9 +156,7 @@ class NotesExtractor(QObject):
                 if line == f"{split}{split}":
                     if note.get("id"):
                         note["body"] = "\n".join(body).strip()
-                        note_count += 1
                         self.note_extracted.emit(note)
-                        yield note
                     note, body = {}, []
                     continue
 
