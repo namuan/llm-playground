@@ -10,9 +10,10 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, List
-from PyQt6.QtCore import QThread, pyqtSignal
+
 import chromadb
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QObject
+from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtCore import QTimer
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
@@ -88,25 +89,6 @@ class StreamingLabel(QLabel):
         else:
             self.timer.stop()
             self.finished.emit()
-
-
-def get_response_data():
-    # Mock data - will be replaced with database query
-    return {
-        "response": (
-            "I found several breakfast and meal prep ideas in your notes. For high-protein breakfasts, you've saved "
-            "a recipe for overnight protein oats (32g protein) with whey, chia seeds, and Greek yogurt. There's also "
-            "a savory breakfast bowl with scrambled tofu, black beans, and quinoa (28g protein). For meal prep, "
-            "you noted a weekly prep routine: hard-boiled eggs, turkey-veggie egg white muffins, and protein "
-            "pancakes made with cottage cheese. You also bookmarked a protein smoothie recipe with frozen "
-            "banana, spinach, protein powder, and almond butter that you rated 9/10 for taste."
-        ),
-        "collections": [
-            {"title": "Breakfast Recipe Collection", "date": "15/01/2024"},
-            {"title": "Weekly Meal Prep Guide", "date": "28/02/2024"},
-            {"title": "Protein-Rich Recipes", "date": "10/03/2024"},
-        ],
-    }
 
 
 class EmbeddingsWorker(QThread):
@@ -270,8 +252,8 @@ class Notechat(QMainWindow):
         title_layout.addWidget(self.progress_label)
         title_layout.addStretch()
 
-        extract_button = QPushButton("Extract Notes")
-        extract_button.setStyleSheet("""
+        refresh_notes_button = QPushButton("Refresh Notes")
+        refresh_notes_button.setStyleSheet("""
             QPushButton {
                 padding: 5px 10px;
                 border: none;
@@ -280,7 +262,7 @@ class Notechat(QMainWindow):
                 color: white;
             }
         """)
-        extract_button.clicked.connect(self.handle_extraction)
+        refresh_notes_button.clicked.connect(self.handle_extraction)
 
         # Create status widget
         status_widget = QWidget()
@@ -295,7 +277,7 @@ class Notechat(QMainWindow):
         status_layout.addWidget(active_label)
 
         title_bar_layout.addWidget(title_widget)
-        title_bar_layout.addWidget(extract_button)
+        title_bar_layout.addWidget(refresh_notes_button)
         title_bar_layout.addWidget(status_widget, alignment=Qt.AlignmentFlag.AlignRight)
 
         return title_bar
@@ -432,7 +414,7 @@ class Notechat(QMainWindow):
         # Focus on input
         self.text_input.setFocus()
 
-    def build_assistant_widget(self):
+    def build_assistant_widget(self, response_data):
         assistant_widget = QWidget()
         assistant_widget.setStyleSheet("background-color: white; border-radius: 10px;")
         assistant_layout = QVBoxLayout(assistant_widget)
@@ -446,9 +428,6 @@ class Notechat(QMainWindow):
         header_layout.addWidget(icon)
         header_layout.addWidget(title)
         header_layout.addStretch()
-
-        # Get response data
-        response_data = get_response_data()
 
         # Use StreamingLabel instead of QLabel
         response_text = StreamingLabel()
@@ -499,12 +478,13 @@ class Notechat(QMainWindow):
     def handle_send(self):
         message = self.text_input.text()
         if message.strip():
-            # Add user message
             user_widget = self.build_user_widget(message)
             self.chat_layout.insertWidget(self.chat_layout.count() - 1, user_widget)
-
-            # Add assistant response
-            assistant_widget = self.build_assistant_widget()
+            matching_documents = self.search_embeddings(message)
+            matching_documents["response"] = self.generate_summary_from(
+                matching_documents["response"]
+            )
+            assistant_widget = self.build_assistant_widget(matching_documents)
             self.chat_layout.insertWidget(
                 self.chat_layout.count() - 1, assistant_widget
             )
@@ -539,6 +519,50 @@ class Notechat(QMainWindow):
         self.embeddings_worker = EmbeddingsWorker(notes)
         self.embeddings_worker.progress_signal.connect(self.update_progress_message)
         self.embeddings_worker.start()
+
+    def search_embeddings(self, message):
+        try:
+            client = chromadb.PersistentClient(path=EMBEDDINGS_PATH.as_posix())
+            collection = client.get_collection("notes_collection")
+
+            results = collection.query(query_texts=[message], n_results=2)
+
+            response_data = {"response": "", "collections": []}
+
+            if results and results["documents"]:
+                # Build natural response from results
+                response_text = "I found several relevant notes about your query. "
+
+                for doc, metadata in zip(
+                    results["documents"][0], results["metadatas"][0]
+                ):
+                    # Add a summary sentence from each document
+                    summary = doc[:500] + "..." if len(doc) > 500 else doc
+                    response_text += f"{summary} "
+
+                    # Add to collections
+                    response_data["collections"].append(
+                        {
+                            "title": metadata["title"],
+                            "date": metadata["created"].split("T")[
+                                0
+                            ],  # Format date from ISO string
+                        }
+                    )
+
+                response_data["response"] = response_text.strip()
+            else:
+                response_data["response"] = (
+                    "I couldn't find any relevant notes matching your query."
+                )
+
+            return response_data
+
+        except Exception as e:
+            return {"response": f"Error searching notes: {str(e)}", "collections": []}
+
+    def generate_summary_from(self, matching_notes: str):
+        return matching_notes
 
 
 def main():
