@@ -4,10 +4,22 @@
 #   "PyQt6",
 # ]
 # ///
+import secrets
+import subprocess
 import sys
+from typing import Dict, List, Generator
 
+from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QObject
+from PyQt6.QtCore import QThread
+from PyQt6.QtCore import QTimer
 from PyQt6.QtCore import Qt
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import (
+    QDialog,
+    QProgressBar,
+    QMessageBox,
+)
 from PyQt6.QtWidgets import QHBoxLayout
 from PyQt6.QtWidgets import QLabel
 from PyQt6.QtWidgets import QLineEdit
@@ -16,9 +28,29 @@ from PyQt6.QtWidgets import QPushButton
 from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtWidgets import QVBoxLayout
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import QTimer
-from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
-from PyQt6.QtCore import pyqtSignal
+
+EXTRACT_SCRIPT = """
+tell application "Notes"
+   repeat with eachNote in every note
+      set noteId to the id of eachNote
+      set noteTitle to the name of eachNote
+      set noteBody to the body of eachNote
+      set noteCreatedDate to the creation date of eachNote
+      set noteCreated to (noteCreatedDate as «class isot» as string)
+      set noteUpdatedDate to the modification date of eachNote
+      set noteUpdated to (noteUpdatedDate as «class isot» as string)
+      set noteContainer to container of eachNote
+      set noteFolderId to the id of noteContainer
+      log "{split}-id: " & noteId & "\n"
+      log "{split}-created: " & noteCreated & "\n"
+      log "{split}-updated: " & noteUpdated & "\n"
+      log "{split}-folder: " & noteFolderId & "\n"
+      log "{split}-title: " & noteTitle & "\n\n"
+      log noteBody & "\n"
+      log "{split}{split}" & "\n"
+   end repeat
+end tell
+""".strip()
 
 
 # Add this new class after the imports
@@ -76,6 +108,135 @@ def get_response_data():
     }
 
 
+class NotesExtractor(QObject):
+    progress_signal = pyqtSignal(int, int)  # current, total
+    note_extracted = pyqtSignal(dict)  # extracted note data
+    finished = pyqtSignal()
+    error = pyqtSignal(str)
+
+    def __init__(self):
+        super().__init__()
+        self.thread = QThread()
+        self.thread.started.connect(self._run_extraction)
+        self.finished.connect(self.thread.quit)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.moveToThread(self.thread)
+
+    def start_extraction(self):
+        self.thread.start()
+
+    def _run_extraction(self):
+        for _ in self.extract_notes():
+            pass
+
+    def extract_notes(self) -> Generator[Dict[str, str], None, None]:
+        try:
+            split = secrets.token_hex(8)
+            process = subprocess.Popen(
+                ["osascript", "-e", EXTRACT_SCRIPT.format(split=split)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+
+            # Get total number of notes
+            total_notes = int(
+                subprocess.check_output(
+                    [
+                        "osascript",
+                        "-e",
+                        'tell application "Notes" to get count of notes',
+                    ]
+                ).strip()
+            )
+
+            note: Dict[str, str] = {}
+            body: List[str] = []
+            note_count = 0
+
+            for line in process.stdout:
+                line = line.decode("mac_roman").strip()
+
+                if line == f"{split}{split}":
+                    if note.get("id"):
+                        note["body"] = "\n".join(body).strip()
+                        note_count += 1
+                        self.progress_signal.emit(note_count, total_notes)
+                        self.note_extracted.emit(note)
+                        yield note
+                    note, body = {}, []
+                    continue
+
+                found_key = False
+                for key in ("id", "title", "folder", "created", "updated"):
+                    if line.startswith(f"{split}-{key}: "):
+                        note[key] = line[len(f"{split}-{key}: ") :]
+                        found_key = True
+                        break
+                if not found_key:
+                    body.append(line)
+
+            process.stdout.close()
+            process.wait()
+            self.finished.emit()
+
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class ExtractionDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.init_ui()
+        self.extracted_notes = []
+
+    def init_ui(self):
+        self.setWindowTitle("Extracting Notes")
+        self.setModal(True)
+        self.setMinimumWidth(400)
+
+        layout = QVBoxLayout(self)
+
+        # Progress section
+        progress_group = QWidget()
+        progress_layout = QVBoxLayout(progress_group)
+
+        self.status_label = QLabel("Preparing to extract notes...")
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(True)
+
+        progress_layout.addWidget(self.status_label)
+        progress_layout.addWidget(self.progress_bar)
+
+        # Notes counter
+        self.counter_label = QLabel("Notes extracted: 0")
+
+        # Buttons
+        button_box = QHBoxLayout()
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        button_box.addWidget(self.cancel_button)
+
+        layout.addWidget(progress_group)
+        layout.addWidget(self.counter_label)
+        layout.addLayout(button_box)
+
+    def update_progress(self, current: int, total: int):
+        percentage = int((current / total) * 100)
+        self.progress_bar.setValue(percentage)
+        self.status_label.setText(f"Extracting notes... ({current}/{total})")
+        self.counter_label.setText(f"Notes extracted: {current}")
+
+    def handle_note(self, note: dict):
+        self.extracted_notes.append(note)
+
+    def handle_error(self, error_msg: str):
+        QMessageBox.critical(self, "Error", f"Error extracting notes: {error_msg}")
+        self.reject()
+
+    def handle_finished(self):
+        self.accept()
+
+
 class Notechat(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -105,6 +266,18 @@ class Notechat(QMainWindow):
         status_layout = QHBoxLayout(status_widget)
         status_layout.setContentsMargins(0, 0, 0, 0)
 
+        extract_button = QPushButton("Extract Notes")
+        extract_button.setStyleSheet("""
+            QPushButton {
+                padding: 5px 10px;
+                border: none;
+                border-radius: 5px;
+                background-color: #4CAF50;
+                color: white;
+            }
+        """)
+        extract_button.clicked.connect(self.handle_extraction)
+
         local_label = QLabel("Local")
         local_label.setStyleSheet(
             "background-color: white; padding: 5px 10px; border-radius: 15px;"
@@ -119,9 +292,39 @@ class Notechat(QMainWindow):
         status_layout.addWidget(active_label)
 
         title_bar_layout.addWidget(title_widget)
+        title_bar_layout.addWidget(extract_button)
         title_bar_layout.addWidget(status_widget, alignment=Qt.AlignmentFlag.AlignRight)
 
         return title_bar
+
+    def handle_extraction(self):
+        dialog = ExtractionDialog(self)
+        extractor = NotesExtractor()
+
+        # Connect signals
+        extractor.progress_signal.connect(dialog.update_progress)
+        extractor.note_extracted.connect(dialog.handle_note)
+        extractor.error.connect(dialog.handle_error)
+        extractor.finished.connect(dialog.handle_finished)
+
+        # Start extraction
+        extractor.start_extraction()
+
+        # Show dialog
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.handle_extracted_notes(dialog.extracted_notes)
+
+    def handle_extracted_notes(self, notes: List[Dict[str, str]]):
+        message = f"Extracted {len(notes)} notes successfully!"
+
+        # Add system message to chat
+        system_widget = QLabel(message)
+        system_widget.setStyleSheet("""
+            background-color: #E8F5E9;
+            padding: 10px;
+            border-radius: 5px;
+        """)
+        self.chat_layout.insertWidget(self.chat_layout.count() - 1, system_widget)
 
     def create_chat_area(self):
         chat_widget = QWidget()
