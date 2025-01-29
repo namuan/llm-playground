@@ -4,6 +4,7 @@
 #   "PyQt6",
 # ]
 # ///
+
 import secrets
 import subprocess
 import sys
@@ -108,52 +109,47 @@ def get_response_data():
     }
 
 
-class NotesExtractor(QObject):
-    progress_signal = pyqtSignal(int)  # current, total
+class NotesExtractorWorker(QThread):
+    progress_signal = pyqtSignal(int)  # total notes count
     note_extracted = pyqtSignal(dict)  # extracted note data
-    finished = pyqtSignal()
     error = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
-        self.thread = QThread()
-        self.thread.started.connect(self.extract_notes)
-        self.finished.connect(self.thread.quit)
-        self.thread.finished.connect(self.thread.deleteLater)
-        self.moveToThread(self.thread)
+        self.split = secrets.token_hex(8)
 
-    def start_extraction(self):
-        self.thread.start()
-
-    def extract_notes(self):
+    def run(self):
         try:
-            split = secrets.token_hex(8)
-            process = subprocess.Popen(
-                ["osascript", "-e", EXTRACT_SCRIPT.format(split=split)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-            )
-
-            # Get total number of notes
+            # Get total number of notes first
             total_notes = int(
                 subprocess.check_output(
                     [
                         "osascript",
                         "-e",
                         'tell application "Notes" to get count of notes',
-                    ]
+                    ],
                 ).strip()
             )
-
             self.progress_signal.emit(total_notes)
+
+            # Start extraction process
+            process = subprocess.Popen(
+                ["osascript", "-e", EXTRACT_SCRIPT.format(split=self.split)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
 
             note: Dict[str, str] = {}
             body: List[str] = []
 
             for line in process.stdout:
+                if self.isInterruptionRequested():
+                    process.terminate()
+                    return
+
                 line = line.decode("mac_roman").strip()
 
-                if line == f"{split}{split}":
+                if line == f"{self.split}{self.split}":
                     if note.get("id"):
                         note["body"] = "\n".join(body).strip()
                         self.note_extracted.emit(note)
@@ -162,8 +158,8 @@ class NotesExtractor(QObject):
 
                 found_key = False
                 for key in ("id", "title", "folder", "created", "updated"):
-                    if line.startswith(f"{split}-{key}: "):
-                        note[key] = line[len(f"{split}-{key}: ") :]
+                    if line.startswith(f"{self.split}-{key}: "):
+                        note[key] = line[len(f"{self.split}-{key}: ") :]
                         found_key = True
                         break
                 if not found_key:
@@ -171,10 +167,33 @@ class NotesExtractor(QObject):
 
             process.stdout.close()
             process.wait()
-            self.finished.emit()
 
         except Exception as e:
             self.error.emit(str(e))
+
+
+class NotesExtractor(QObject):
+    progress_signal = pyqtSignal(int)
+    note_extracted = pyqtSignal(dict)
+    finished = pyqtSignal()
+    error = pyqtSignal(str)
+
+    def __init__(self):
+        super().__init__()
+        self.worker = NotesExtractorWorker()
+
+        # Connect worker signals
+        self.worker.progress_signal.connect(self.progress_signal)
+        self.worker.note_extracted.connect(self.note_extracted)
+        self.worker.error.connect(self.error)
+        self.worker.finished.connect(self.finished)
+        self.worker.finished.connect(self.worker.deleteLater)
+
+    def start_extraction(self):
+        self.worker.start()
+
+    def stop_extraction(self):
+        self.worker.requestInterruption()
 
 
 class ExtractionDialog(QDialog):
@@ -182,6 +201,7 @@ class ExtractionDialog(QDialog):
         super().__init__(parent)
         self.init_ui()
         self.extracted_notes = []
+        self.extractor = None
 
     def init_ui(self):
         self.setWindowTitle("Extracting Notes")
@@ -214,6 +234,23 @@ class ExtractionDialog(QDialog):
         layout.addWidget(self.counter_label)
         layout.addLayout(button_box)
 
+    def reject(self):
+        if self.extractor:
+            self.extractor.stop_extraction()
+        super().reject()
+
+    def start_extraction(self):
+        self.extractor = NotesExtractor()
+
+        # Connect signals
+        self.extractor.progress_signal.connect(self.update_progress)
+        self.extractor.note_extracted.connect(self.handle_note)
+        self.extractor.error.connect(self.handle_error)
+        self.extractor.finished.connect(self.accept)
+
+        # Start extraction
+        self.extractor.start_extraction()
+
     def update_progress(self, total: int):
         self.status_label.setText(f"Extracting {total} notes...")
 
@@ -223,9 +260,6 @@ class ExtractionDialog(QDialog):
     def handle_error(self, error_msg: str):
         QMessageBox.critical(self, "Error", f"Error extracting notes: {error_msg}")
         self.reject()
-
-    def handle_finished(self):
-        self.accept()
 
 
 class Notechat(QMainWindow):
@@ -290,18 +324,8 @@ class Notechat(QMainWindow):
 
     def handle_extraction(self):
         dialog = ExtractionDialog(self)
-        extractor = NotesExtractor()
+        dialog.start_extraction()
 
-        # Connect signals
-        extractor.progress_signal.connect(dialog.update_progress)
-        extractor.note_extracted.connect(dialog.handle_note)
-        extractor.error.connect(dialog.handle_error)
-        extractor.finished.connect(dialog.handle_finished)
-
-        # Start extraction
-        extractor.start_extraction()
-
-        # Show dialog
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.handle_extracted_notes(dialog.extracted_notes)
 
