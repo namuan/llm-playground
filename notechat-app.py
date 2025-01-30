@@ -3,6 +3,7 @@
 # dependencies = [
 #   "PyQt6",
 #   "chromadb",
+#   "sentence_transformers",
 #   "trafilatura",
 #   "ollama",
 # ]
@@ -34,13 +35,18 @@ from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtWidgets import QVBoxLayout
 from PyQt6.QtWidgets import QWidget
 
+from chromadb.utils.embedding_functions.sentence_transformer_embedding_function import (
+    SentenceTransformerEmbeddingFunction,
+)
+
 EMBEDDINGS_PATH = Path.home() / ".cache" / "notechat" / "embeddings"
 
 
 def chroma_collection():
     client = chromadb.PersistentClient(path=EMBEDDINGS_PATH.as_posix())
+    ef = SentenceTransformerEmbeddingFunction(model_name="gtr-t5-large")
     collection = client.get_or_create_collection(
-        name="notes_collection",
+        name="notes_collection", embedding_function=ef
     )
     return collection
 
