@@ -4,8 +4,10 @@
 #   "PyQt6",
 #   "chromadb",
 #   "trafilatura",
+#   "ollama",
 # ]
 # ///
+import re
 import secrets
 import subprocess
 import sys
@@ -13,6 +15,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import chromadb
+import ollama
 import trafilatura
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QObject
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -109,6 +112,38 @@ class EmbeddingsWorker(QThread):
         super().__init__()
         self.notes = notes
 
+    def chunk_content(self, content: str, note_id: str) -> List[dict]:
+        chunks = []
+        sentences = re.split("[.!?]+", content)
+        current_chunk = []
+        current_size = 0
+
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+
+            sentence_size = len(sentence)
+
+            if current_size + sentence_size > 2000:
+                if current_chunk:  # Save current chunk
+                    chunk_content = ". ".join(current_chunk) + "."
+                    chunks.append(
+                        {"id": f"{note_id}_{len(chunks)}", "content": chunk_content}
+                    )
+                    current_chunk = []
+                    current_size = 0
+
+            current_chunk.append(sentence)
+            current_size += sentence_size
+
+        # Handle remaining chunk
+        if current_chunk:
+            chunk_content = ". ".join(current_chunk) + "."
+            chunks.append({"id": f"{note_id}_{len(chunks)}", "content": chunk_content})
+
+        return chunks
+
     def run(self):
         try:
             self.progress_signal.emit("Creating embeddings...")
@@ -117,9 +152,12 @@ class EmbeddingsWorker(QThread):
             for note in self.notes:
                 content = trafilatura.extract(note["body"])
                 if content:
-                    note_with_content = note.copy()
-                    note_with_content["extracted_content"] = content
-                    filtered_notes_with_content.append(note_with_content)
+                    chunks = self.chunk_content(content, note["id"])
+                    for chunk in chunks:
+                        note_with_content = note.copy()
+                        note_with_content["id"] = chunk["id"]
+                        note_with_content["extracted_content"] = chunk["content"]
+                        filtered_notes_with_content.append(note_with_content)
 
             # Prepare data for adding to collection
             ids = [note["id"] for note in filtered_notes_with_content]
@@ -544,7 +582,9 @@ class Notechat(QMainWindow):
 
             if results and results["documents"]:
                 # Build natural response from results
-                response_text = "I found several relevant notes about your query. "
+                response_text = ""
+
+                seen_titles = set()
 
                 for doc, metadata in zip(
                     results["documents"][0], results["metadatas"][0]
@@ -553,15 +593,16 @@ class Notechat(QMainWindow):
                     summary = doc[:500] + "..." if len(doc) > 500 else doc
                     response_text += f"{summary} "
 
-                    # Add to collections
-                    response_data["collections"].append(
-                        {
-                            "title": metadata["title"],
-                            "date": metadata["created"].split("T")[
-                                0
-                            ],  # Format date from ISO string
-                        }
-                    )
+                    # Only add to collections if title hasn't been seen yet
+                    title_date = (metadata["title"], metadata["created"])
+                    if title_date not in seen_titles:
+                        seen_titles.add(title_date)
+                        response_data["collections"].append(
+                            {
+                                "title": metadata["title"],
+                                "date": metadata["created"].split("T")[0],
+                            }
+                        )
 
                 response_data["response"] = response_text.strip()
             else:
@@ -575,7 +616,13 @@ class Notechat(QMainWindow):
             return {"response": f"Error searching notes: {str(e)}", "collections": []}
 
     def generate_summary_from(self, matching_notes: str):
-        return matching_notes
+        response = ollama.generate(
+            model="CognitiveComputations/dolphin-gemma2:2b",
+            system="You are a helpful summary generator",
+            prompt=f"Generate summary of the following document: {matching_notes}",
+        ).response
+
+        return response
 
 
 def main():
