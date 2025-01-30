@@ -3,6 +3,7 @@
 # dependencies = [
 #   "PyQt6",
 #   "chromadb",
+#   "trafilatura",
 # ]
 # ///
 import secrets
@@ -12,6 +13,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import chromadb
+import trafilatura
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QObject
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtCore import QTimer
@@ -30,6 +32,15 @@ from PyQt6.QtWidgets import QVBoxLayout
 from PyQt6.QtWidgets import QWidget
 
 EMBEDDINGS_PATH = Path.home() / ".cache" / "notechat" / "embeddings"
+
+
+def chroma_collection():
+    client = chromadb.PersistentClient(path=EMBEDDINGS_PATH.as_posix())
+    collection = client.get_or_create_collection(
+        name="notes_collection",
+    )
+    return collection
+
 
 EXTRACT_SCRIPT = """
 tell application "Notes"
@@ -92,7 +103,7 @@ class StreamingLabel(QLabel):
 
 
 class EmbeddingsWorker(QThread):
-    progress_signal = pyqtSignal(str)  # Define at class level
+    progress_signal = pyqtSignal(str)
 
     def __init__(self, notes):
         super().__init__()
@@ -101,15 +112,20 @@ class EmbeddingsWorker(QThread):
     def run(self):
         try:
             self.progress_signal.emit("Creating embeddings...")
-            client = chromadb.PersistentClient(path=EMBEDDINGS_PATH.as_posix())
+            filtered_notes_with_content = []
 
-            collection = client.get_or_create_collection(
-                name="notes_collection",
-            )
+            for note in self.notes:
+                content = trafilatura.extract(note["body"])
+                if content:
+                    note_with_content = note.copy()
+                    note_with_content["extracted_content"] = content
+                    filtered_notes_with_content.append(note_with_content)
 
             # Prepare data for adding to collection
-            ids = [note["id"] for note in self.notes]
-            documents = [note["body"] for note in self.notes]
+            ids = [note["id"] for note in filtered_notes_with_content]
+            documents = [
+                note["extracted_content"] for note in filtered_notes_with_content
+            ]
             metadatas = [
                 {
                     "title": note["title"],
@@ -117,11 +133,11 @@ class EmbeddingsWorker(QThread):
                     "updated": note["updated"],
                     "folder": note["folder"],
                 }
-                for note in self.notes
+                for note in filtered_notes_with_content
             ]
 
             # Add items to collection
-            collection.add(ids=ids, documents=documents, metadatas=metadatas)
+            chroma_collection().add(ids=ids, documents=documents, metadatas=metadatas)
 
             self.progress_signal.emit("Embeddings created successfully!")
 
@@ -522,10 +538,7 @@ class Notechat(QMainWindow):
 
     def search_embeddings(self, message):
         try:
-            client = chromadb.PersistentClient(path=EMBEDDINGS_PATH.as_posix())
-            collection = client.get_collection("notes_collection")
-
-            results = collection.query(query_texts=[message], n_results=2)
+            results = chroma_collection().query(query_texts=[message], n_results=2)
 
             response_data = {"response": "", "collections": []}
 
