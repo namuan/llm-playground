@@ -2,6 +2,7 @@
 # /// script
 # dependencies = [
 #   "smolagents",
+#   "litellm",
 # ]
 # ///
 from argparse import ArgumentParser
@@ -26,6 +27,12 @@ def parse_args():
         dest="verbose",
         help="Increase verbosity of logging output",
     )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="qwen2.5-coder:14b",
+        help="Model to use for the LLM",
+    )
     return parser.parse_args()
 
 
@@ -33,9 +40,9 @@ def main(args):
     agent = CodeAgent(
         tools=[DuckDuckGoSearchTool()],
         model=LiteLLMModel(
-            model_id="ollama_chat/qwen2.5-coder:14b",
+            model_id="ollama/llama3.2:latest",
             api_base="http://localhost:11434",  # replace with remote open-ai compatible server if necessary
-            api_key="your-api-key",  # replace with API key if necessary
+            api_key="ollama",  # replace with API key if necessary
         ),
     )
     agent.run(
