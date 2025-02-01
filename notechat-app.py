@@ -2,21 +2,25 @@
 # /// script
 # dependencies = [
 #   "PyQt6",
-#   "chromadb",
 #   "sentence_transformers",
 #   "trafilatura",
 #   "ollama",
+#   "sqlite-vec",
 # ]
 # ///
+import logging
 import re
 import secrets
+import sqlite3
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
+from typing import Optional
 
-import chromadb
 import ollama
+import sqlite_vec
 import trafilatura
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QObject
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -34,21 +38,86 @@ from PyQt6.QtWidgets import QPushButton
 from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtWidgets import QVBoxLayout
 from PyQt6.QtWidgets import QWidget
+from sentence_transformers import SentenceTransformer
 
-from chromadb.utils.embedding_functions.sentence_transformer_embedding_function import (
-    SentenceTransformerEmbeddingFunction,
-)
-
-EMBEDDINGS_PATH = Path.home() / ".cache" / "notechat" / "embeddings"
+EMBEDDINGS_PATH = Path.home() / ".cache" / "notechat" / "notes.db"
 
 
-def chroma_collection():
-    client = chromadb.PersistentClient(path=EMBEDDINGS_PATH.as_posix())
-    ef = SentenceTransformerEmbeddingFunction(model_name="gtr-t5-large")
-    collection = client.get_or_create_collection(
-        name="notes_collection", embedding_function=ef
-    )
-    return collection
+# Initialize sentence transformer model
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+
+def get_embeddings(text: str) -> bytes:
+    return model.encode(text).tobytes()
+
+
+class DatabaseConnection:
+    def __init__(self, db_path: Path):
+        if not db_path.parent.exists():
+            db_path.parent.mkdir(exist_ok=True)
+        self.db_path = db_path.as_posix()
+        self.conn: Optional[sqlite3.Connection] = None
+
+    def __enter__(self) -> sqlite3.Cursor:
+        try:
+            self.conn = sqlite3.connect(self.db_path)
+            # Enable and load the vector search extension
+            self.conn.enable_load_extension(True)
+            sqlite_vec.load(self.conn)
+            self.conn.enable_load_extension(False)
+            return self.conn.cursor()
+        except sqlite3.Error as e:
+            logging.error(f"Error connecting to database: {e}")
+            raise
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.conn:
+            if exc_type:
+                self.conn.rollback()
+            else:
+                self.conn.commit()
+            self.conn.close()
+
+
+def initialize_database(db_path) -> None:
+    with DatabaseConnection(db_path) as cursor:
+        try:
+            # Create the main notes table
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    created DATETIME NOT NULL,
+                    updated DATETIME NOT NULL,
+                    folder TEXT,
+                    content TEXT NOT NULL,
+                    content_embeddings BLOB
+                )
+            """
+            )
+
+            # Create the VSS virtual table
+            cursor.execute(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS vss_notes USING vec0(
+                    content_embedding float[384]
+                )
+                """
+            )
+
+            # Create the FTS virtual table
+            cursor.execute(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS fts_notes using fts5(
+                  content,
+                  content='notes', content_rowid='id'
+                );
+                """
+            )
+        except sqlite3.Error as e:
+            print(f"Error creating tables: {e}")
+            raise
 
 
 EXTRACT_SCRIPT = """
@@ -131,7 +200,7 @@ class EmbeddingsWorker(QThread):
 
             sentence_size = len(sentence)
 
-            if current_size + sentence_size > 2000:
+            if current_size + sentence_size > 1000:
                 if current_chunk:  # Save current chunk
                     chunk_content = ". ".join(current_chunk) + "."
                     chunks.append(
@@ -165,25 +234,51 @@ class EmbeddingsWorker(QThread):
                         note_with_content["extracted_content"] = chunk["content"]
                         filtered_notes_with_content.append(note_with_content)
 
-            # Prepare data for adding to collection
-            ids = [note["id"] for note in filtered_notes_with_content]
-            documents = [
-                note["extracted_content"] for note in filtered_notes_with_content
-            ]
-            metadatas = [
-                {
-                    "title": note["title"],
-                    "created": note["created"],
-                    "updated": note["updated"],
-                    "folder": note["folder"],
-                }
-                for note in filtered_notes_with_content
-            ]
+            # Prepare data for adding to database
+            with DatabaseConnection(EMBEDDINGS_PATH) as cursor:
+                for note in filtered_notes_with_content:
+                    embeddings = get_embeddings(note["extracted_content"])
+                    created = datetime.fromisoformat(note["created"])
+                    updated = datetime.fromisoformat(note["updated"])
+                    # Insert into main notes table
+                    cursor.execute(
+                        """
+                        INSERT INTO notes (title, created, updated, folder, content, content_embeddings)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            note["title"],
+                            created,
+                            updated,
+                            note["folder"],
+                            note["extracted_content"],
+                            embeddings,
+                        ),
+                    )
 
-            # Add items to collection
-            chroma_collection().add(ids=ids, documents=documents, metadatas=metadatas)
+                    # Get the rowid of the inserted note
+                    note_id = cursor.lastrowid
+
+                    # Insert into VSS virtual table
+                    cursor.execute(
+                        """
+                        INSERT INTO vss_notes(rowid, content_embedding)
+                        VALUES (?, ?)
+                        """,
+                        (note_id, embeddings),
+                    )
 
             self.progress_signal.emit("Embeddings created successfully!")
+
+            with DatabaseConnection(EMBEDDINGS_PATH) as cursor:
+                cursor.execute(
+                    """
+                    insert into fts_notes(rowid, content)
+                    select rowid, content from notes;
+                    """,
+                )
+
+            self.progress_signal.emit("Search Index created successfully!")
 
         except Exception as e:
             self.progress_signal.emit(f"Error creating embeddings: {str(e)}")
@@ -284,6 +379,7 @@ class Notechat(QMainWindow):
         self.extracted_notes = []
         self.extractor = self.setup_extractor()
         self.init_ui()
+        initialize_database(EMBEDDINGS_PATH)
 
     def create_title_bar(self):
         title_bar = QWidget()
@@ -582,31 +678,46 @@ class Notechat(QMainWindow):
 
     def search_embeddings(self, message):
         try:
-            results = chroma_collection().query(query_texts=[message], n_results=2)
+            query_embedding = get_embeddings(message)
+            with DatabaseConnection(EMBEDDINGS_PATH) as cursor:
+                cursor.execute(
+                    """
+                    select
+                        n.title,
+                        n.folder,
+                        n.content,
+                        distance,
+                        n.created
+                    from vss_notes
+                    JOIN notes n ON n.id = rowid
+                    where content_embedding match ?
+                    and k = ?
+                    order by distance;
+                    """,
+                    (query_embedding, 2),
+                )
+                results = cursor.fetchall()
 
             response_data = {"response": "", "collections": []}
 
-            if results and results["documents"]:
+            if results:
                 # Build natural response from results
                 response_text = ""
-
                 seen_titles = set()
 
-                for doc, metadata in zip(
-                    results["documents"][0], results["metadatas"][0]
-                ):
+                for title, folder, content, distance, created in results:
                     # Add a summary sentence from each document
-                    summary = doc[:500] + "..." if len(doc) > 500 else doc
+                    summary = content[:500] + "..." if len(content) > 500 else content
                     response_text += f"{summary} "
 
                     # Only add to collections if title hasn't been seen yet
-                    title_date = (metadata["title"], metadata["created"])
+                    title_date = (title, created)
                     if title_date not in seen_titles:
                         seen_titles.add(title_date)
                         response_data["collections"].append(
                             {
-                                "title": metadata["title"],
-                                "date": metadata["created"].split("T")[0],
+                                "title": title,
+                                "date": created.split(" ")[0],
                             }
                         )
 
