@@ -40,7 +40,7 @@ def main(args):
     agent = CodeAgent(
         tools=[DuckDuckGoSearchTool()],
         model=LiteLLMModel(
-            model_id="ollama/llama3.2:latest",
+            model_id=f"ollama/{args.model}",
             api_base="http://localhost:11434",  # replace with remote open-ai compatible server if necessary
             api_key="ollama",  # replace with API key if necessary
         ),
