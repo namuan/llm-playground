@@ -41,7 +41,8 @@ from PyQt6.QtWidgets import QWidget
 from sentence_transformers import SentenceTransformer
 
 EMBEDDINGS_PATH = Path.home() / ".cache" / "notechat" / "notes.db"
-
+OLLAMA_MODEL = "qwen2.5:latest"
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
 EXTRACT_SCRIPT = """
 tell application "Notes"
@@ -67,14 +68,10 @@ end tell
 """.strip()
 
 
-OLLAMA_MODEL = "qwen2.5:latest"
-
-
-model = SentenceTransformer("all-MiniLM-L6-v2")
-
-
-def get_embeddings(text: str) -> bytes:
-    return model.encode(text).tobytes()
+class EmbeddingUtils:
+    @staticmethod
+    def get_embeddings(text: str) -> bytes:
+        return model.encode(text).tobytes()
 
 
 class DatabaseConnection:
@@ -105,45 +102,142 @@ class DatabaseConnection:
             self.conn.close()
 
 
-def initialize_database(db_path) -> None:
-    with DatabaseConnection(db_path) as cursor:
-        try:
-            # Create the main notes table
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS notes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    created DATETIME NOT NULL,
-                    updated DATETIME NOT NULL,
-                    folder TEXT,
-                    content TEXT NOT NULL,
-                    content_embeddings BLOB
-                )
-            """
-            )
+class DatabaseManager:
+    def __init__(self, db_path: Path):
+        self.db_path = db_path
 
-            # Create the VSS virtual table
-            cursor.execute(
+    def initialize_database(self) -> None:
+        with DatabaseConnection(self.db_path) as cursor:
+            try:
+                # Create the main notes table
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT NOT NULL,
+                        created DATETIME NOT NULL,
+                        updated DATETIME NOT NULL,
+                        folder TEXT,
+                        content TEXT NOT NULL,
+                        content_embeddings BLOB
+                    )
                 """
-                CREATE VIRTUAL TABLE IF NOT EXISTS vss_notes USING vec0(
-                    content_embedding float[384]
                 )
-                """
-            )
 
-            # Create the FTS virtual table
-            cursor.execute(
-                """
-                CREATE VIRTUAL TABLE IF NOT EXISTS fts_notes using fts5(
-                  content,
-                  content='notes', content_rowid='id'
-                );
-                """
-            )
-        except sqlite3.Error as e:
-            print(f"Error creating tables: {e}")
-            raise
+                # Create the VSS virtual table
+                cursor.execute(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS vss_notes USING vec0(
+                        content_embedding float[384]
+                    )
+                    """
+                )
+
+                # Create the FTS virtual table
+                cursor.execute(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS fts_notes using fts5(
+                      content,
+                      content='notes', content_rowid='id'
+                    );
+                    """
+                )
+            except sqlite3.Error as e:
+                print(f"Error creating tables: {e}")
+                raise
+
+    def find_similar_notes(self, query: str, limit: int = 5) -> list:
+        with DatabaseConnection(self.db_path) as cursor:
+            try:
+                cursor.execute(
+                    """
+                with vec_matches as (
+                  select
+                    rowid,
+                    row_number() over (order by distance) as rank_number,
+                    distance
+                  from vss_notes
+                  where
+                    content_embedding match :embedding
+                    and k = :limit
+                ),
+                -- the FTS5 search results
+                fts_matches as (
+                  select
+                    rowid,
+                    row_number() over (order by rank) as rank_number,
+                    rank as score
+                  from fts_notes
+                  where content match :query
+                  limit :limit
+                ),
+                -- combine FTS5 + vector search results with RRF
+                final as (
+                  select
+                    notes.id as id,
+                    notes.title as title,
+                    notes.content as content,
+                    notes.created as created,
+                    notes.folder as folder,
+                    vec_matches.rank_number as vec_rank,
+                    fts_matches.rank_number as fts_rank,
+                    (
+                      coalesce(1.0 / (:rrf_k + fts_matches.rank_number), 0.0) * :weight_fts +
+                      coalesce(1.0 / (:rrf_k + vec_matches.rank_number), 0.0) * :weight_vec
+                    ) as combined_rank,
+                    vec_matches.distance as vec_distance,
+                    fts_matches.score as fts_score
+                  from fts_matches
+                  full outer join vec_matches on vec_matches.rowid = fts_matches.rowid
+                  join notes on notes.id = coalesce(fts_matches.rowid, vec_matches.rowid)
+                  order by combined_rank desc
+                )
+                select title, folder, content, created from final;
+                    """,
+                    {
+                        "query": query,
+                        "embedding": EmbeddingUtils.get_embeddings(query),
+                        "limit": limit,
+                        "rrf_k": 60,
+                        "weight_fts": 1.0,
+                        "weight_vec": 1.0,
+                    },
+                )
+                return cursor.fetchall()
+            except sqlite3.Error as e:
+                logging.error(f"Error searching notes: {e}")
+                raise
+
+
+class SummarizationAssistant:
+    def summary_prompt_for(self, matching_notes: str) -> str:
+        prompt = f"""
+        You are a summarization assistant. Below is a list of notes.
+        Your task is to generate an accurate and concise summary that captures the key points from these notes.
+        Identify key supporting ideas
+        Highlight important facts or evidence
+        Reveal the author's purpose or perspective
+        Explore any significant implications or conclusions.
+
+        Please provide your answer strictly in valid HTML.
+        Do not include any markdown formatting (such as markdown quotes or code block formatting), explanations, or any text outside of the HTML.
+        The HTML should include appropriate tags (e.g., <html>, <head>, <body>, <h1>, <p>, <ul>, <li>) for a complete HTML document if applicable.
+
+        List of Notes:
+        {matching_notes}
+
+        Summary (in HTML):
+        """
+        return prompt
+
+    def generate_summary(self, matching_notes: str) -> str:
+        prompt = self.summary_prompt_for(matching_notes)
+        response = ollama.generate(
+            model=OLLAMA_MODEL,
+            system="You are a helpful summary generator for selected notes.",
+            prompt=prompt,
+        ).response
+        return response
 
 
 class StreamingLabel(QLabel):
@@ -239,7 +333,9 @@ class EmbeddingsWorker(QThread):
             # Prepare data for adding to database
             with DatabaseConnection(EMBEDDINGS_PATH) as cursor:
                 for note in filtered_notes_with_content:
-                    embeddings = get_embeddings(note["extracted_content"])
+                    embeddings = EmbeddingUtils.get_embeddings(
+                        note["extracted_content"]
+                    )
                     created = datetime.fromisoformat(note["created"])
                     updated = datetime.fromisoformat(note["updated"])
                     # Insert into main notes table
@@ -373,91 +469,6 @@ class NotesExtractor(QObject):
         self.worker.requestInterruption()
 
 
-def find_similar_notes(query, limit: int = 5) -> list:
-    with DatabaseConnection(EMBEDDINGS_PATH) as cursor:
-        try:
-            cursor.execute(
-                """
-with vec_matches as (
-  select
-    rowid,
-    row_number() over (order by distance) as rank_number,
-    distance
-  from vss_notes
-  where
-    content_embedding match :embedding
-    and k = :limit
-),
--- the FTS5 search results
-fts_matches as (
-  select
-    rowid,
-    row_number() over (order by rank) as rank_number,
-    rank as score
-  from fts_notes
-  where content match :query
-  limit :limit
-),
--- combine FTS5 + vector search results with RRF
-final as (
-  select
-    notes.id as id,
-    notes.title as title,
-    notes.content as content,
-    notes.created as created,
-    notes.folder as folder,
-    vec_matches.rank_number as vec_rank,
-    fts_matches.rank_number as fts_rank,
-    (
-      coalesce(1.0 / (:rrf_k + fts_matches.rank_number), 0.0) * :weight_fts +
-      coalesce(1.0 / (:rrf_k + vec_matches.rank_number), 0.0) * :weight_vec
-    ) as combined_rank,
-    vec_matches.distance as vec_distance,
-    fts_matches.score as fts_score
-  from fts_matches
-  full outer join vec_matches on vec_matches.rowid = fts_matches.rowid
-  join notes on notes.id = coalesce(fts_matches.rowid, vec_matches.rowid)
-  order by combined_rank desc
-)
-select title, folder, content, created from final;
-                """,
-                {
-                    "query": query,
-                    "embedding": get_embeddings(query),
-                    "limit": limit,
-                    "rrf_k": 60,
-                    "weight_fts": 1.0,
-                    "weight_vec": 1.0,
-                },
-            )
-            return cursor.fetchall()
-        except sqlite3.Error as e:
-            logging.error(f"Error searching notes: {e}")
-            raise
-
-
-def summary_prompt_for(matching_notes):
-    prompt = f"""
-    You are a summarization assistant. Below is a list of notes.
-    Your task is to generate an accurate and concise summary that captures the key points from these notes.
-    Identify key supporting ideas
-    Highlight important facts or evidence
-    Reveal the author's purpose or perspective
-    Explore any significant implications or conclusions.
-
-    Please provide your answer strictly in valid HTML.
-    Do not include any markdown formatting (such as markdown quotes or code block formatting), explanations, or any text outside of the HTML.
-    The HTML should include appropriate tags (e.g., <html>, <head>, <body>, <h1>, <p>, <ul>, <li>) for a complete HTML document if applicable.
-
-    List of Notes:
-    {matching_notes}
-
-    Summary (in HTML):
-    """
-
-    return prompt
-
-
 class Notechat(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -465,8 +476,10 @@ class Notechat(QMainWindow):
         self.text_input = None
         self.extracted_notes = []
         self.extractor = self.setup_extractor()
+        self.db_manager = DatabaseManager(EMBEDDINGS_PATH)
+        self.summarization_assistant = SummarizationAssistant()
         self.init_ui()
-        initialize_database(EMBEDDINGS_PATH)
+        self.db_manager.initialize_database()
 
     def create_title_bar(self):
         title_bar = QWidget()
@@ -570,7 +583,6 @@ class Notechat(QMainWindow):
         """
         )
         self.chat_layout.insertWidget(self.chat_layout.count() - 1, system_widget)
-
         self.prepare_embeddings(notes)
 
     def create_chat_area(self):
@@ -786,8 +798,7 @@ class Notechat(QMainWindow):
 
     def search_embeddings(self, message):
         try:
-            results = find_similar_notes(message, limit=2)
-
+            results = self.db_manager.find_similar_notes(message, limit=2)
             response_data = {"response": "", "collections": []}
 
             if results:
@@ -823,13 +834,7 @@ class Notechat(QMainWindow):
             return {"response": f"Error searching notes: {str(e)}", "collections": []}
 
     def generate_summary_from(self, matching_notes: str):
-        response = ollama.generate(
-            model=OLLAMA_MODEL,
-            system="You are a helpful summary generator for selected notes.",
-            prompt=summary_prompt_for(matching_notes),
-        ).response
-
-        return response
+        return self.summarization_assistant.generate_summary(matching_notes)
 
     def open_note(self, title):
         script = f"""
@@ -843,12 +848,14 @@ class Notechat(QMainWindow):
             QMessageBox.warning(self, "Error", f"Could not open note: {str(e)}")
 
 
-def main():
-    app = QApplication(sys.argv)
-    window = Notechat()
-    window.show()
-    sys.exit(app.exec())
+class NotechatApp:
+    @staticmethod
+    def run():
+        app = QApplication(sys.argv)
+        window = Notechat()
+        window.show()
+        sys.exit(app.exec())
 
 
 if __name__ == "__main__":
-    main()
+    NotechatApp.run()
