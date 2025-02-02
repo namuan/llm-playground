@@ -689,9 +689,24 @@ class Notechat(QMainWindow):
         collections.hide()  # Hide initially
 
         for note_data in response_data["collections"]:
-            note = QLabel(f"📝 {note_data['title']}  {note_data['date']}")
-            note.setStyleSheet("color: #666;")
-            collections_layout.addWidget(note)
+            note_button = QPushButton(f"📝 {note_data['title']}  {note_data['date']}")
+            note_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #F5F5F5;
+                    border: 1px solid #E0E0E0;
+                    border-radius: 5px;
+                    padding: 5px 10px;
+                    color: #666;
+                }
+                QPushButton:hover {
+                    background-color: #EEEEEE;
+                }
+            """)
+            note_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            note_button.clicked.connect(
+                lambda checked, title=note_data["title"]: self.open_note(title)
+            )
+            collections_layout.addWidget(note_button)
             collections_layout.addStretch()
 
         assistant_layout.addWidget(header)
@@ -815,6 +830,17 @@ class Notechat(QMainWindow):
         ).response
 
         return response
+
+    def open_note(self, title):
+        script = f"""
+        tell application "Notes"
+            show note "{title}"
+        end tell
+        """
+        try:
+            subprocess.run(["osascript", "-e", script], check=True)
+        except subprocess.CalledProcessError as e:
+            QMessageBox.warning(self, "Error", f"Could not open note: {str(e)}")
 
 
 def main():
