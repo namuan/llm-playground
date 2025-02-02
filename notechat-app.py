@@ -371,6 +371,89 @@ class NotesExtractor(QObject):
         self.worker.requestInterruption()
 
 
+def find_similar_notes(query, limit: int = 5) -> list:
+    with DatabaseConnection(EMBEDDINGS_PATH) as cursor:
+        try:
+            cursor.execute(
+                """
+with vec_matches as (
+  select
+    rowid,
+    row_number() over (order by distance) as rank_number,
+    distance
+  from vss_notes
+  where
+    content_embedding match :embedding
+    and k = :limit
+),
+-- the FTS5 search results
+fts_matches as (
+  select
+    rowid,
+    row_number() over (order by rank) as rank_number,
+    rank as score
+  from fts_notes
+  where content match :query
+  limit :limit
+),
+-- combine FTS5 + vector search results with RRF
+final as (
+  select
+    notes.id as id,
+    notes.title as title,
+    notes.content as content,
+    notes.created as created,
+    notes.folder as folder,
+    vec_matches.rank_number as vec_rank,
+    fts_matches.rank_number as fts_rank,
+    (
+      coalesce(1.0 / (:rrf_k + fts_matches.rank_number), 0.0) * :weight_fts +
+      coalesce(1.0 / (:rrf_k + vec_matches.rank_number), 0.0) * :weight_vec
+    ) as combined_rank,
+    vec_matches.distance as vec_distance,
+    fts_matches.score as fts_score
+  from fts_matches
+  full outer join vec_matches on vec_matches.rowid = fts_matches.rowid
+  join notes on notes.id = coalesce(fts_matches.rowid, vec_matches.rowid)
+  order by combined_rank desc
+)
+select title, folder, content, created from final;
+                """,
+                {
+                    "query": query,
+                    "embedding": get_embeddings(query),
+                    "limit": limit,
+                    "rrf_k": 60,
+                    "weight_fts": 1.0,
+                    "weight_vec": 1.0,
+                },
+            )
+            return cursor.fetchall()
+        except sqlite3.Error as e:
+            logging.error(f"Error searching notes: {e}")
+            raise
+
+
+def summary_prompt_for(matching_notes):
+    prompt = f"""
+    1.) Analyze the given notes and generate 5 essential questions that, when answered, capture the main points and core meaning of the text.
+    2.) When formulating your questions:
+        a. Address the central theme or argument
+        b. Identify key supporting ideas
+        c. Highlight important facts or evidence
+        d. Reveal the author's purpose or perspective
+        e. Explore any significant implications or conclusions.
+    3.) Answer all of your generated questions one-by-one in detail.
+
+    Do not reply with the question. Just collect the answers and provide the detailed summary.
+
+    Notes:
+    {matching_notes}
+    """
+
+    return prompt
+
+
 class Notechat(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -678,25 +761,7 @@ class Notechat(QMainWindow):
 
     def search_embeddings(self, message):
         try:
-            query_embedding = get_embeddings(message)
-            with DatabaseConnection(EMBEDDINGS_PATH) as cursor:
-                cursor.execute(
-                    """
-                    select
-                        n.title,
-                        n.folder,
-                        n.content,
-                        distance,
-                        n.created
-                    from vss_notes
-                    JOIN notes n ON n.id = rowid
-                    where content_embedding match ?
-                    and k = ?
-                    order by distance;
-                    """,
-                    (query_embedding, 2),
-                )
-                results = cursor.fetchall()
+            results = find_similar_notes(message, limit=2)
 
             response_data = {"response": "", "collections": []}
 
@@ -705,7 +770,7 @@ class Notechat(QMainWindow):
                 response_text = ""
                 seen_titles = set()
 
-                for title, folder, content, distance, created in results:
+                for title, folder, content, created in results:
                     # Add a summary sentence from each document
                     summary = content[:500] + "..." if len(content) > 500 else content
                     response_text += f"{summary} "
@@ -734,9 +799,9 @@ class Notechat(QMainWindow):
 
     def generate_summary_from(self, matching_notes: str):
         response = ollama.generate(
-            model="CognitiveComputations/dolphin-gemma2:2b",
+            model="llama3.2:latest",
             system="You are a helpful summary generator",
-            prompt=f"Generate summary of the following document: {matching_notes}",
+            prompt=summary_prompt_for(matching_notes),
         ).response
 
         return response
