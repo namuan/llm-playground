@@ -438,21 +438,21 @@ select title, folder, content, created from final;
 
 def summary_prompt_for(matching_notes):
     prompt = f"""
-    1.) Analyze the given notes and generate 5 essential questions that, when answered, capture the main points and core meaning of the text.
-    2.) When formulating your questions:
-        a. Address the central theme or argument
-        b. Identify key supporting ideas
-        c. Highlight important facts or evidence
-        d. Reveal the author's purpose or perspective
-        e. Explore any significant implications or conclusions.
-    3.) Answer all of your generated questions one-by-one in detail.
+    You are a summarization assistant. Below is a list of notes.
+    Your task is to generate an accurate and concise summary that captures the key points from these notes.
+    Identify key supporting ideas
+    Highlight important facts or evidence
+    Reveal the author's purpose or perspective
+    Explore any significant implications or conclusions.
 
-    Instructions:
-    Do not reply with the question. Just collect the answers and provide the detailed summary.
-    Answer in HTML syntax.
+    Please provide your answer strictly in valid HTML.
+    Do not include any markdown formatting (such as markdown quotes or code block formatting), explanations, or any text outside of the HTML.
+    The HTML should include appropriate tags (e.g., <html>, <head>, <body>, <h1>, <p>, <ul>, <li>) for a complete HTML document if applicable.
 
-    Notes:
+    List of Notes:
     {matching_notes}
+
+    Summary (in HTML):
     """
 
     return prompt
