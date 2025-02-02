@@ -19,7 +19,6 @@ import argparse
 import logging
 import sqlite3
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
-from datetime import datetime
 from typing import Optional
 
 import sqlite_vec
@@ -98,88 +97,62 @@ class DatabaseConnection:
             self.conn.close()
 
 
-def initialize_database(db_path: str) -> None:
-    with DatabaseConnection(db_path) as cursor:
-        try:
-            # Create the main notes table
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS notes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    created DATETIME NOT NULL,
-                    updated DATETIME NOT NULL,
-                    folder TEXT,
-                    content TEXT NOT NULL,
-                    content_embeddings BLOB
-                )
-            """
-            )
-
-            # Create the VSS virtual table
-            cursor.execute(
-                """
-                CREATE VIRTUAL TABLE IF NOT EXISTS vss_notes USING vec0(
-                    content_embedding float[384]
-                )
-                """
-            )
-        except sqlite3.Error as e:
-            logging.error(f"Error creating tables: {e}")
-            raise
-
-
-def add_note(db_path: str, title: str, folder: str, content: str) -> None:
-    with DatabaseConnection(db_path) as cursor:
-        try:
-            created = datetime.now()
-            updated = datetime.now()
-            embeddings = get_embeddings(content)
-
-            # Insert into main notes table
-            cursor.execute(
-                """
-                INSERT INTO notes (title, created, updated, folder, content, content_embeddings)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (title, created, updated, folder, content, embeddings),
-            )
-
-            # Get the rowid of the inserted note
-            note_id = cursor.lastrowid
-
-            # Insert into VSS virtual table
-            cursor.execute(
-                """
-                INSERT INTO vss_notes(rowid, content_embedding)
-                VALUES (?, ?)
-                """,
-                (note_id, embeddings),
-            )
-
-            logging.info(f"Added note: {title}")
-        except sqlite3.Error as e:
-            logging.error(f"Error adding note: {e}")
-            raise
-
-
-def find_similar_notes(db_path: str, query_embedding, limit: int = 5) -> list:
+def find_similar_notes(db_path: str, query, limit: int = 5) -> list:
     with DatabaseConnection(db_path) as cursor:
         try:
             cursor.execute(
                 """
-                select
-                    n.title,
-                    n.folder,
-                    n.content,
-                    distance
-                from vss_notes
-                JOIN notes n ON n.id = rowid
-                where content_embedding match ?
-                and k = ?
-                order by distance;
+with vec_matches as (
+  select
+    rowid,
+    row_number() over (order by distance) as rank_number,
+    distance
+  from vss_notes
+  where
+    content_embedding match :embedding
+    and k = :limit
+),
+-- the FTS5 search results
+fts_matches as (
+  select
+    rowid,
+    row_number() over (order by rank) as rank_number,
+    rank as score
+  from fts_notes
+  where content match :query
+  limit :limit
+),
+-- combine FTS5 + vector search results with RRF
+final as (
+  select
+    notes.id as id,
+    notes.title as title,
+    notes.content as content,
+    notes.created as created_at,
+    notes.folder as folder,
+    vec_matches.rank_number as vec_rank,
+    fts_matches.rank_number as fts_rank,
+    (
+      coalesce(1.0 / (:rrf_k + fts_matches.rank_number), 0.0) * :weight_fts +
+      coalesce(1.0 / (:rrf_k + vec_matches.rank_number), 0.0) * :weight_vec
+    ) as combined_rank,
+    vec_matches.distance as vec_distance,
+    fts_matches.score as fts_score
+  from fts_matches
+  full outer join vec_matches on vec_matches.rowid = fts_matches.rowid
+  join notes on notes.id = coalesce(fts_matches.rowid, vec_matches.rowid)
+  order by combined_rank desc
+)
+select title, folder, content, created_at from final;
                 """,
-                (query_embedding, limit),
+                {
+                    "query": query,
+                    "embedding": get_embeddings(query),
+                    "limit": limit,
+                    "rrf_k": 60,
+                    "weight_fts": 1.0,
+                    "weight_vec": 1.0,
+                },
             )
             return cursor.fetchall()
         except sqlite3.Error as e:
@@ -188,12 +161,13 @@ def find_similar_notes(db_path: str, query_embedding, limit: int = 5) -> list:
 
 
 def main(args: argparse.Namespace) -> None:
-    query = "Car Insurance Company"
-    embedded_query = get_embeddings(query)
-    similar_notes = find_similar_notes(args.db_path, embedded_query)
+    query = "Tell me about Car Insurance"
+    similar_notes = find_similar_notes(args.db_path, query, limit=2)
     logging.info(f"\nSimilar notes for query '{query}':")
-    for title, folder, content, distance in similar_notes:
-        logging.info(f"Title: {title}, Folder: {folder}, Distance: {distance:.4f}")
+    # for i in similar_notes:
+    #     print(i)
+    for title, folder, content, created_at in similar_notes:
+        logging.info(f"Title: {title}, Folder: {folder}, Created At : {created_at}")
         # logging.info(f"Content: {content}\n")
 
 
