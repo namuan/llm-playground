@@ -445,6 +445,17 @@ class NotesExtractorWorker(QThread):
             self.error.emit(str(e))
 
 
+class OllamaStatusWorker(QThread):
+    status_signal = pyqtSignal(bool)
+
+    def run(self):
+        try:
+            ollama.ps()
+            self.status_signal.emit(True)
+        except Exception:
+            self.status_signal.emit(False)
+
+
 class NotesExtractor(QObject):
     progress_signal = pyqtSignal(str)
     note_extracted = pyqtSignal(dict)
@@ -480,22 +491,21 @@ class Notechat(QMainWindow):
         self.summarization_assistant = SummarizationAssistant()
         self.init_ui()
         self.db_manager.initialize_database()
+        self.check_ollama_status()
 
     def create_title_bar(self):
         title_bar = QWidget()
         title_bar_layout = QHBoxLayout(title_bar)
         title_bar_layout.setContentsMargins(10, 10, 10, 10)
 
-        # Create title widget with icon
         title_widget = QWidget()
         title_layout = QHBoxLayout(title_widget)
         title_layout.setContentsMargins(0, 0, 0, 0)
 
-        icon_label = QLabel()
-        icon_label.setFixedSize(20, 20)
-        icon_label.setStyleSheet("background-color: #FFD700; border-radius: 5px;")
+        self.icon_label = QLabel()
+        self.icon_label.setFixedSize(20, 20)
+        self.icon_label.setStyleSheet("background-color: #FFD700; border-radius: 5px;")
 
-        # Add progress status label
         self.progress_label = QLabel()
         self.progress_label.setStyleSheet(
             """
@@ -504,9 +514,9 @@ class Notechat(QMainWindow):
             font-size: 12px;
         """
         )
-        self.progress_label.hide()  # Initially hidden
+        self.progress_label.hide()
 
-        title_layout.addWidget(icon_label)
+        title_layout.addWidget(self.icon_label)
         title_layout.addWidget(self.progress_label)
         title_layout.addStretch()
 
@@ -524,23 +534,27 @@ class Notechat(QMainWindow):
         )
         refresh_notes_button.clicked.connect(self.handle_extraction)
 
-        # Create status widget
-        status_widget = QWidget()
-        status_layout = QHBoxLayout(status_widget)
-        status_layout.setContentsMargins(0, 0, 0, 0)
-
-        active_label = QLabel("Active")
-        active_label.setStyleSheet(
-            "background-color: #2ECC71; color: white; padding: 5px 10px; border-radius: 15px;"
-        )
-
-        status_layout.addWidget(active_label)
-
         title_bar_layout.addWidget(title_widget)
         title_bar_layout.addWidget(refresh_notes_button)
-        title_bar_layout.addWidget(status_widget, alignment=Qt.AlignmentFlag.AlignRight)
 
         return title_bar
+
+    def check_ollama_status(self):
+        self.ollama_worker = OllamaStatusWorker()
+        self.ollama_worker.status_signal.connect(self.update_ollama_status)
+        self.ollama_worker.start()
+
+    def update_ollama_status(self, is_connected: bool):
+        if is_connected:
+            self.icon_label.setStyleSheet(
+                "background-color: #4CAF50; border-radius: 5px;"
+            )
+            self.icon_label.setToolTip("Ollama is connected and running")
+        else:
+            self.icon_label.setStyleSheet(
+                "background-color: #F44336; border-radius: 5px;"
+            )
+            self.icon_label.setToolTip("Ollama is not connected")
 
     def setup_extractor(self):
         self.extractor = NotesExtractor()
@@ -702,7 +716,8 @@ class Notechat(QMainWindow):
 
         for note_data in response_data["collections"]:
             note_button = QPushButton(f"📝 {note_data['title']}  {note_data['date']}")
-            note_button.setStyleSheet("""
+            note_button.setStyleSheet(
+                """
                 QPushButton {
                     background-color: #F5F5F5;
                     border: 1px solid #E0E0E0;
@@ -713,7 +728,8 @@ class Notechat(QMainWindow):
                 QPushButton:hover {
                     background-color: #EEEEEE;
                 }
-            """)
+            """
+            )
             note_button.setCursor(Qt.CursorShape.PointingHandCursor)
             note_button.clicked.connect(
                 lambda checked, title=note_data["title"]: self.open_note(title)
