@@ -43,7 +43,33 @@ from sentence_transformers import SentenceTransformer
 EMBEDDINGS_PATH = Path.home() / ".cache" / "notechat" / "notes.db"
 
 
-# Initialize sentence transformer model
+EXTRACT_SCRIPT = """
+tell application "Notes"
+   repeat with eachNote in every note
+      set noteId to the id of eachNote
+      set noteTitle to the name of eachNote
+      set noteBody to the body of eachNote
+      set noteCreatedDate to the creation date of eachNote
+      set noteCreated to (noteCreatedDate as «class isot» as string)
+      set noteUpdatedDate to the modification date of eachNote
+      set noteUpdated to (noteUpdatedDate as «class isot» as string)
+      set noteContainer to container of eachNote
+      set noteFolderId to the id of noteContainer
+      log "{split}-id: " & noteId & "\n"
+      log "{split}-created: " & noteCreated & "\n"
+      log "{split}-updated: " & noteUpdated & "\n"
+      log "{split}-folder: " & noteFolderId & "\n"
+      log "{split}-title: " & noteTitle & "\n\n"
+      log noteBody & "\n"
+      log "{split}{split}" & "\n"
+   end repeat
+end tell
+""".strip()
+
+
+OLLAMA_MODEL = "qwen2.5:latest"
+
+
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
@@ -120,31 +146,6 @@ def initialize_database(db_path) -> None:
             raise
 
 
-EXTRACT_SCRIPT = """
-tell application "Notes"
-   repeat with eachNote in every note
-      set noteId to the id of eachNote
-      set noteTitle to the name of eachNote
-      set noteBody to the body of eachNote
-      set noteCreatedDate to the creation date of eachNote
-      set noteCreated to (noteCreatedDate as «class isot» as string)
-      set noteUpdatedDate to the modification date of eachNote
-      set noteUpdated to (noteUpdatedDate as «class isot» as string)
-      set noteContainer to container of eachNote
-      set noteFolderId to the id of noteContainer
-      log "{split}-id: " & noteId & "\n"
-      log "{split}-created: " & noteCreated & "\n"
-      log "{split}-updated: " & noteUpdated & "\n"
-      log "{split}-folder: " & noteFolderId & "\n"
-      log "{split}-title: " & noteTitle & "\n\n"
-      log noteBody & "\n"
-      log "{split}{split}" & "\n"
-   end repeat
-end tell
-""".strip()
-
-
-# Add this new class after the imports
 class StreamingLabel(QLabel):
     finished = pyqtSignal()
 
@@ -152,6 +153,7 @@ class StreamingLabel(QLabel):
         super().__init__()
         self.setWordWrap(True)
         self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.setTextFormat(Qt.TextFormat.RichText)
         self.full_text = ""
         self.current_position = 0
         self.words = []
@@ -445,7 +447,9 @@ def summary_prompt_for(matching_notes):
         e. Explore any significant implications or conclusions.
     3.) Answer all of your generated questions one-by-one in detail.
 
+    Instructions:
     Do not reply with the question. Just collect the answers and provide the detailed summary.
+    Answer in HTML syntax.
 
     Notes:
     {matching_notes}
@@ -480,11 +484,13 @@ class Notechat(QMainWindow):
 
         # Add progress status label
         self.progress_label = QLabel()
-        self.progress_label.setStyleSheet("""
+        self.progress_label.setStyleSheet(
+            """
             padding: 2px 8px;
             color: #666;
             font-size: 12px;
-        """)
+        """
+        )
         self.progress_label.hide()  # Initially hidden
 
         title_layout.addWidget(icon_label)
@@ -492,7 +498,8 @@ class Notechat(QMainWindow):
         title_layout.addStretch()
 
         refresh_notes_button = QPushButton("Refresh Notes")
-        refresh_notes_button.setStyleSheet("""
+        refresh_notes_button.setStyleSheet(
+            """
             QPushButton {
                 padding: 5px 10px;
                 border: none;
@@ -500,7 +507,8 @@ class Notechat(QMainWindow):
                 background-color: #4CAF50;
                 color: white;
             }
-        """)
+        """
+        )
         refresh_notes_button.clicked.connect(self.handle_extraction)
 
         # Create status widget
@@ -554,11 +562,13 @@ class Notechat(QMainWindow):
         message = f"Extracted {len(notes)} notes successfully!"
         # Add system message to chat
         system_widget = QLabel(message)
-        system_widget.setStyleSheet("""
+        system_widget.setStyleSheet(
+            """
             background-color: #E8F5E9;
             padding: 10px;
             border-radius: 5px;
-        """)
+        """
+        )
         self.chat_layout.insertWidget(self.chat_layout.count() - 1, system_widget)
 
         self.prepare_embeddings(notes)
@@ -799,8 +809,8 @@ class Notechat(QMainWindow):
 
     def generate_summary_from(self, matching_notes: str):
         response = ollama.generate(
-            model="llama3.2:latest",
-            system="You are a helpful summary generator",
+            model=OLLAMA_MODEL,
+            system="You are a helpful summary generator for selected notes.",
             prompt=summary_prompt_for(matching_notes),
         ).response
 
