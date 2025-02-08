@@ -213,7 +213,7 @@ def main(args):
     for function in function_pipeline.functions:
         output = f"Agent Response: {function_caller.call_function(function)}"
 
-    logging.info(f"Final output: {output}")
+    print(f"Final output: {output}")
 
 
 if __name__ == "__main__":
