@@ -32,7 +32,7 @@ def run_llm(user_prompt: str, model: str, system_prompt: str = None):
     return response.message.content
 
 
-def JSON_llm(user_prompt: str, schema, system_prompt: str = None):
+def json_llm(user_prompt: str, schema, system_prompt: str = None):
     try:
         messages = []
         if system_prompt:
@@ -75,7 +75,7 @@ def evaluate(
     """Evaluate if a solution meets requirements."""
     full_prompt = f"{evaluator_prompt}\nOriginal task: {task}\nContent to evaluate: {generated_content}"
 
-    response = JSON_llm(full_prompt, Evaluation)
+    response = json_llm(full_prompt, Evaluation)
 
     evaluation = response.evaluation
     feedback = response.feedback
