@@ -52,7 +52,7 @@ class Task(BaseModel):
 
 class TaskList(BaseModel):
     analysis: str
-    tasks: List[Task] = Field(..., default_factory=list)
+    tasks: List[Task] = Field(default_factory=list)
 
 
 def json_llm(user_prompt: str, schema, system_prompt: str = None):
@@ -100,14 +100,12 @@ def orchestrator_workflow(task: str, orchestrator_prompt: str, worker_prompt: st
     )
 
     # Parse orchestrator response
-    analysis = orchestrator_response.analysis
-    tasks: TaskList = orchestrator_response.tasks
+    analysis: str = orchestrator_response.analysis
+    tasks: list = orchestrator_response.tasks
 
     print("\n=== ORCHESTRATOR OUTPUT ===")
     print(f"\nANALYSIS:\n{analysis}")
-    print(f"\nTASKS:\n{json.dumps([t.dict() for t in tasks], indent=2)}")
-    # print(f"\nTASKS:\n{json.dumps(tasks.model_dump(), indent=2)}")
-
+    print(f"\nTASKS:\n{json.dumps([t.model_dump() for t in tasks], indent=2)}")
     worker_model = ["qwen2.5:latest"] * len(tasks)
 
     # Use ThreadPoolExecutor for parallel processing
@@ -121,6 +119,7 @@ def orchestrator_workflow(task: str, orchestrator_prompt: str, worker_prompt: st
                     task_description=task_info.description,
                 ),
                 model=model,
+                system_prompt=None,
             )
             for task_info, model in zip(tasks, worker_model)
         ]
@@ -131,7 +130,7 @@ def orchestrator_workflow(task: str, orchestrator_prompt: str, worker_prompt: st
 
 def main():
     task = """Write a product description for a new eco-friendly water bottle.
-    The target_audience is environmentally conscious millennials and key product features are: plastic-free, insulated, lifetime warranty
+    The target_audience is environmentally conscious people and key product features are: plastic-free, insulated, lifetime warranty
     """
 
     tasks, worker_resp = orchestrator_workflow(
