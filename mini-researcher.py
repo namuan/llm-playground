@@ -1,18 +1,20 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # dependencies = [
-#   "litellm",
 #   "ollama",
+#   "litellm",
 # ]
 # ///
 import logging
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel
+
 import ollama
+from pydantic import BaseModel
 
 LITELLM_MODEL = "llama3.1:latest"
 LITELLM_BASE_URL = "http://localhost:11434"
@@ -100,7 +102,7 @@ class Document:
         if content:
             self.content = content
         self.version += 1
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         self.metadata["last_modified"] = now
         if status:
             self.status = status
@@ -112,6 +114,8 @@ class Document:
 # -------------------------------
 # Tool Abstract Class and Implementations
 # -------------------------------
+
+
 class Tool(ABC):
     @abstractmethod
     def execute(self, *args, **kwargs) -> Any:
@@ -120,7 +124,6 @@ class Tool(ABC):
 
 class TextEditorTool(Tool):
     def execute(self, document: Document) -> Document:
-        # Simulate editing: update content and move to next status.
         logging.info("TextEditorTool: Editing document...")
         new_content = document.content + "\n[Edited by Editor Agent]"
         document.update(content=new_content, status=DocumentStatus.RESEARCH)
@@ -129,7 +132,6 @@ class TextEditorTool(Tool):
 
 class WebSearchTool(Tool):
     def execute(self, document: Document) -> Document:
-        # Simulate researching: append research content and update status.
         logging.info("WebSearchTool: Researching document...")
         new_content = document.content + "\n[Research data appended]"
         document.update(content=new_content, status=DocumentStatus.REVIEW)
@@ -138,7 +140,6 @@ class WebSearchTool(Tool):
 
 class GrammarCheckTool(Tool):
     def execute(self, document: Document) -> Document:
-        # Simulate reviewing: append review note and update status.
         logging.info("GrammarCheckTool: Reviewing document...")
         new_content = document.content + "\n[Document reviewed and approved]"
         document.update(content=new_content, status=DocumentStatus.REVISION)
@@ -147,7 +148,6 @@ class GrammarCheckTool(Tool):
 
 class ContentGenerationTool(Tool):
     def execute(self, document: Document) -> Document:
-        # Simulate content generation/refinement.
         logging.info("ContentGenerationTool: Refining document content...")
         new_content = document.content + "\n[Content refined by Writer Agent]"
         document.update(content=new_content, status=DocumentStatus.PUBLISHING)
@@ -158,8 +158,6 @@ class SearchQueryGeneratorTool(Tool):
     def execute(self, document: Document) -> Document:
         # Extract keywords from title and content
         text = f"{document.title} {document.content}"
-
-        # Simple keyword extraction
         words = text.lower().split()
         stopwords = {"and", "the", "is", "in", "it", "of", "to", "by", "[", "]"}
         keywords = [word for word in words if word not in stopwords and len(word) > 2]
@@ -171,7 +169,6 @@ Keywords: {', '.join(keywords)}
 
 Generate specific, research-oriented queries that would help gather comprehensive information on this topic.
 """
-
         result = llm_call(
             model=LITELLM_MODEL,
             prompt=prompt,
@@ -181,9 +178,8 @@ Generate specific, research-oriented queries that would help gather comprehensiv
 
         search_queries = SearchQueries.model_validate_json(result)
         queries = search_queries.queries
-        logging.info(f"Search queries: {search_queries.queries}")
+        logging.info(f"Search queries: {queries}")
 
-        # Store queries in document metadata
         document.metadata["search_queries"] = queries
         document.update(
             content=document.content + f"\n[Generated {len(queries)} search queries]"
@@ -191,6 +187,9 @@ Generate specific, research-oriented queries that would help gather comprehensiv
         return document
 
 
+# -------------------------------
+# Agent Abstract Base Class and Implementations
+# -------------------------------
 class Agent(ABC):
     @abstractmethod
     def process(self, document: Document) -> Document:
@@ -226,7 +225,6 @@ class EditorAgent(Agent):
             raise
 
     def validate(self, document: Document) -> bool:
-        # For demo purposes assume validation is successful.
         return True
 
     def log_action(self, action: str):
@@ -298,7 +296,6 @@ class WriterAgent(Agent):
             if not self.validate(document):
                 raise AgentError("Validation failed in WriterAgent")
             document = self.writer_tool.execute(document)
-            # Set final status.
             document.update(status=DocumentStatus.FINAL)
             self.log_action("Finished writing process")
             return document
@@ -343,21 +340,45 @@ class SearchQueryAgent(Agent):
 
 
 # -------------------------------
+# Parallel Processing Function
+# -------------------------------
+def process_query(query: str, base_document: Document) -> str:
+    """
+    Process a single search query by running the ResearchAgent and ReviewerAgent sequentially.
+    Returns the additional content generated for this query.
+    """
+    from copy import deepcopy
+
+    # Create a deepcopy to avoid modifying the base document concurrently.
+    document_copy = deepcopy(base_document)
+    # Optionally add context regarding which query is being processed.
+    document_copy.content += f"\n[Processing search query: {query}]"
+    # Process with ResearchAgent.
+    research_agent = ResearchAgent()
+    document_copy = research_agent.process(document_copy)
+    # Process with ReviewerAgent.
+    reviewer_agent = ReviewerAgent()
+    document_copy = reviewer_agent.process(document_copy)
+    # The function returns the newly appended content.
+    # For simplicity, assume that appended content is what differs after processing.
+    return document_copy.content
+
+
+# -------------------------------
 # Pipeline Coordinator
 # -------------------------------
 class DocumentPipeline:
     def __init__(self):
         self.agents: List[Agent] = [
             EditorAgent(),
-            SearchQueryAgent(),
-            ResearchAgent(),
-            ReviewerAgent(),
-            WriterAgent(),
+            SearchQueryAgent(),  # Generates the search queries.
         ]
         self.history: List[Dict[str, Any]] = []
+        self.writer_agent = WriterAgent()
 
     def process_document(self, document: Document) -> Document:
         try:
+            # Run initial agents sequentially.
             for agent in self.agents:
                 agent_name = type(agent).__name__
                 logging.info(f"Pipeline: Processing document with {agent_name}...")
@@ -365,11 +386,31 @@ class DocumentPipeline:
                 self.history.append(
                     {
                         "agent": agent_name,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                         "status": document.status.value,
                         "version": document.version,
                     }
                 )
+            # Retrieve the search queries generated.
+            queries = document.metadata.get("search_queries", [])
+            logging.info(
+                f"Pipeline: Running parallel processing for {len(queries)} search queries..."
+            )
+            # Use ThreadPoolExecutor to process each query in parallel.
+            aggregated_content = []
+            with ThreadPoolExecutor(max_workers=len(queries)) as executor:
+                # Using list comprehension to map each query to the worker function.
+                results = executor.map(lambda q: process_query(q, document), queries)
+                for res in results:
+                    aggregated_content.append(res)
+            # Aggregate the results into the main document.
+            document.content += "\n" + "\n".join(aggregated_content)
+            document.update(content=document.content, status=DocumentStatus.WRITING)
+            # Now hand over to WriterAgent.
+            logging.info(
+                "Pipeline: Handing document to WriterAgent for final processing..."
+            )
+            document = self.writer_agent.process(document)
             return document
         except Exception as e:
             logging.error(f"Pipeline error: {str(e)}")
@@ -380,12 +421,10 @@ class DocumentPipeline:
 # Main Entry Point
 # -------------------------------
 def main():
-    # Configure logging
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
     )
 
-    # Initialize pipeline and create a new document.
     pipeline = DocumentPipeline()
     document = Document.create_new(
         title="Artificial Intelligence in Healthcare",
