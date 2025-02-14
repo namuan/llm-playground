@@ -3,17 +3,20 @@
 # dependencies = [
 #   "ollama",
 #   "litellm",
+#   "googlesearch-python",
 # ]
 # ///
 import logging
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 import ollama
+from googlesearch import search
 from pydantic import BaseModel
 
 LITELLM_MODEL = "llama3.1:latest"
@@ -70,7 +73,7 @@ class Document:
 
     @classmethod
     def create_new(cls, title: str = "", content: str = "") -> "Document":
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         initial_metadata = {
             "created": now,
             "last_modified": now,
@@ -133,7 +136,12 @@ class TextEditorTool(Tool):
 class WebSearchTool(Tool):
     def execute(self, document: Document) -> Document:
         logging.info("WebSearchTool: Researching document...")
-        new_content = document.content + "\n[Research data appended]"
+        query = document.metadata.get("query", document.title)
+        search_results = search(query, num_results=10)
+        search_content = "\n".join([f"- {result}" for result in search_results])
+        new_content = (
+            f"{document.content}\n\nSearch Results for '{query}':\n{search_content}"
+        )
         document.update(content=new_content, status=DocumentStatus.REVIEW)
         return document
 
@@ -347,12 +355,10 @@ def process_query(query: str, base_document: Document) -> str:
     Process a single search query by running the ResearchAgent and ReviewerAgent sequentially.
     Returns the additional content generated for this query.
     """
-    from copy import deepcopy
 
     # Create a deepcopy to avoid modifying the base document concurrently.
     document_copy = deepcopy(base_document)
-    # Optionally add context regarding which query is being processed.
-    document_copy.content += f"\n[Processing search query: {query}]"
+    document_copy.metadata["query"] = query
     # Process with ResearchAgent.
     research_agent = ResearchAgent()
     document_copy = research_agent.process(document_copy)
