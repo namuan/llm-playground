@@ -1,7 +1,8 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # dependencies = [
-#   "pandas",
+#   "litellm",
+#   "ollama",
 # ]
 # ///
 import logging
@@ -10,6 +11,22 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
+from pydantic import BaseModel
+import ollama
+
+LITELLM_MODEL = "llama3.1:latest"
+LITELLM_BASE_URL = "http://localhost:11434"
+
+
+class SearchQueries(BaseModel):
+    queries: List[str]
+
+
+def llm_call(model, prompt, format, system_prompt="You are a helpful assistant"):
+    response = ollama.generate(
+        model=model, system=system_prompt, prompt=prompt, format=format
+    ).response
+    return response
 
 
 # -------------------------------
@@ -137,9 +154,43 @@ class ContentGenerationTool(Tool):
         return document
 
 
-# -------------------------------
-# Agent Abstract Class and Implementations
-# -------------------------------
+class SearchQueryGeneratorTool(Tool):
+    def execute(self, document: Document) -> Document:
+        # Extract keywords from title and content
+        text = f"{document.title} {document.content}"
+
+        # Simple keyword extraction
+        words = text.lower().split()
+        stopwords = {"and", "the", "is", "in", "it", "of", "to", "by", "[", "]"}
+        keywords = [word for word in words if word not in stopwords and len(word) > 2]
+
+        prompt = f"""
+Given the following title and keywords, generate 5-7 focused search queries for research:
+Title: {document.title}
+Keywords: {', '.join(keywords)}
+
+Generate specific, research-oriented queries that would help gather comprehensive information on this topic.
+"""
+
+        result = llm_call(
+            model=LITELLM_MODEL,
+            prompt=prompt,
+            format=SearchQueries.model_json_schema(),
+            system_prompt="You are a research assistant specialized in generating effective search queries",
+        )
+
+        search_queries = SearchQueries.model_validate_json(result)
+        queries = search_queries.queries
+        logging.info(f"Search queries: {search_queries.queries}")
+
+        # Store queries in document metadata
+        document.metadata["search_queries"] = queries
+        document.update(
+            content=document.content + f"\n[Generated {len(queries)} search queries]"
+        )
+        return document
+
+
 class Agent(ABC):
     @abstractmethod
     def process(self, document: Document) -> Document:
@@ -265,14 +316,40 @@ class WriterAgent(Agent):
         logging.error(f"[WriterAgent] Error: {str(error)}")
 
 
+class SearchQueryAgent(Agent):
+    def __init__(self):
+        self.query_generator = SearchQueryGeneratorTool()
+
+    def process(self, document: Document) -> Document:
+        try:
+            self.log_action("Starting search query generation")
+            if not self.validate(document):
+                raise AgentError("Validation failed in SearchQueryAgent")
+            document = self.query_generator.execute(document)
+            self.log_action("Finished search query generation")
+            return document
+        except Exception as e:
+            self.handle_error(e)
+            raise
+
+    def validate(self, document: Document) -> bool:
+        return bool(document.title and document.content)
+
+    def log_action(self, action: str):
+        logging.info(f"[SearchQueryAgent] {action}")
+
+    def handle_error(self, error: Exception):
+        logging.error(f"[SearchQueryAgent] Error: {str(error)}")
+
+
 # -------------------------------
 # Pipeline Coordinator
 # -------------------------------
 class DocumentPipeline:
     def __init__(self):
-        # Pipeline order as per processing flow:
         self.agents: List[Agent] = [
             EditorAgent(),
+            SearchQueryAgent(),
             ResearchAgent(),
             ReviewerAgent(),
             WriterAgent(),
@@ -310,7 +387,10 @@ def main():
 
     # Initialize pipeline and create a new document.
     pipeline = DocumentPipeline()
-    document = Document.create_new(title="Example Document", content="Initial content")
+    document = Document.create_new(
+        title="Artificial Intelligence in Healthcare",
+        content="AI applications in medical diagnosis and treatment planning. Machine learning models for patient care optimization.",
+    )
 
     try:
         result = pipeline.process_document(document)
