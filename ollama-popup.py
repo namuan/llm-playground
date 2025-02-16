@@ -21,7 +21,7 @@ from kokoro_onnx import Kokoro
 def get_chat_modes():
     return {
         "Summarise": "Provide summary in bullet points for the following text:",
-        "Explain": "You are a writing assistant. Rewrite the text provided by the user to be more friendly. Output ONLY the friendly text without additional comments. Respond in the same language as the input (e.g., English US, French).",
+        "Explain": "Can you explain the following:",
         "Rewrite": "You are a writing assistant. Rewrite the text provided by the user to improve phrasing. Output ONLY the rewritten text without additional comments. Respond in the same language as the input (e.g., English US, French):",
         "Professional": "You are a writing assistant. Rewrite the text provided by the user to sound more professional. Output ONLY the professional text without additional comments. Respond in the same language as the input (e.g., English US, French):",
         "Friendly": "You are a writing assistant. Rewrite the text provided by the user to be more friendly. Output ONLY the friendly text without additional comments. Respond in the same language as the input (e.g., English US, French):",
