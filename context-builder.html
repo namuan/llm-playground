@@ -213,10 +213,14 @@
         document.getElementById('file-size-filter').addEventListener('input', function() {
             const fileSize = this.value;
             document.getElementById('file-size-filter-display').innerText = `Include files under: ${fileSize}kb`;
-            const input = document.querySelector('input[type="file"]');
-            if (input && input.files) {
-                updateDirectoryStructure(input.files);
-            }
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.webkitdirectory = true; // Allows directory selection
+            input.onchange = e => {
+                const files = e.target.files;
+                updateDirectoryStructure(files);
+            };
+            input.click();
         });
     </script>
 </body>
