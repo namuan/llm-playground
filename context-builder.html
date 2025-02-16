@@ -92,17 +92,20 @@
             input.webkitdirectory = true; // Allows directory selection
             input.onchange = e => {
                 const files = e.target.files;
-                if (files.length > 0) {
+                const fileSizeLimit = document.getElementById('file-size-filter').value * 1024; // Convert kb to bytes
+                const filteredFiles = Array.from(files).filter(file => file.size <= fileSizeLimit);
+
+                if (filteredFiles.length > 0) {
                     const directoryPath = files[0].webkitRelativePath.split('/')[0];
                     const topLevelDirectory = files[0].webkitRelativePath.split('/')[0];
                     document.getElementById('directoryPath').value = topLevelDirectory;
                     console.log('Selected top-level directory:', topLevelDirectory);
 
                     // Example summary data
-                    const repoSummary = `Repository: ${topLevelDirectory}\nFiles analyzed: ${files.length}\n\nEstimated tokens: 7.8k`;
+                    const repoSummary = `Repository: ${topLevelDirectory}\nFiles analyzed: ${filteredFiles.length}\n\nEstimated tokens: 7.8k`;
                     
                     // Generate directory structure
-                    const directoryStructure = Array.from(files).reduce((acc, file) => {
+                    const directoryStructure = filteredFiles.reduce((acc, file) => {
                         const pathParts = file.webkitRelativePath.split('/');
                         pathParts.pop(); // Remove the file name
                         let currentLevel = acc;
@@ -116,7 +119,7 @@
                     }, {});
 
                     // Include files in the directory structure
-                    const directoryStructureWithFiles = Array.from(files).reduce((acc, file) => {
+                    const directoryStructureWithFiles = filteredFiles.reduce((acc, file) => {
                         const pathParts = file.webkitRelativePath.split('/');
                         let currentLevel = acc;
                         pathParts.forEach((part, index) => {
