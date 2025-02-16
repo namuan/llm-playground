@@ -172,9 +172,51 @@
             };
             input.click();
         });
+        const updateDirectoryStructure = (files) => {
+            const fileSizeLimit = document.getElementById('file-size-filter').value * 1024; // Convert kb to bytes
+            const filteredFiles = Array.from(files).filter(file => file.size <= fileSizeLimit);
+
+            if (filteredFiles.length > 0) {
+                const directoryStructureWithFiles = filteredFiles.reduce((acc, file) => {
+                    const pathParts = file.webkitRelativePath.split('/');
+                    let currentLevel = acc;
+                    pathParts.forEach((part, index) => {
+                        if (!currentLevel[part]) {
+                            currentLevel[part] = index === pathParts.length - 1 ? null : {};
+                        }
+                        currentLevel = currentLevel[part];
+                    });
+                    return acc;
+                }, {});
+
+                const structureToString = (obj, indent = '') => {
+                    if (obj === null) return ''; // If it's a file, return an empty string
+                    return Object.keys(obj).map(key => {
+                        const subStructure = structureToString(obj[key], indent + '    ');
+                        return `${indent}├── ${key}\n${subStructure}`;
+                    }).join('');
+                };
+
+                const skipTopLevel = (structure) => {
+                    const keys = Object.keys(structure);
+                    if (keys.length === 1) {
+                        return structure[keys[0]];
+                    }
+                    return structure;
+                };
+
+                const directoryStructureString = structureToString(skipTopLevel(directoryStructureWithFiles));
+                document.getElementById('repo-directory-structure').innerText = `Directory structure:\n${directoryStructureString}`;
+            }
+        };
+
         document.getElementById('file-size-filter').addEventListener('input', function() {
             const fileSize = this.value;
             document.getElementById('file-size-filter-display').innerText = `Include files under: ${fileSize}kb`;
+            const input = document.querySelector('input[type="file"]');
+            if (input && input.files) {
+                updateDirectoryStructure(input.files);
+            }
         });
     </script>
 </body>
