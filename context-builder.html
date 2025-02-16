@@ -96,10 +96,11 @@
                 const files = e.target.files;
                 storedFiles = Array.from(files);
                 const fileSizeLimit = document.getElementById('file-size-filter').value * 1024; // Convert kb to bytes
-                const excludePattern = document.getElementById('exclude-pattern').value.split(',').map(pattern => pattern.trim());
+                const excludePatternInput = document.getElementById('exclude-pattern').value;
+                const excludePattern = excludePatternInput ? excludePatternInput.split(',').map(pattern => pattern.trim()) : [];
                 const filteredFiles = Array.from(files).filter(file => {
                     const filePath = file.webkitRelativePath;
-                    const isExcluded = excludePattern.some(pattern => filePath.includes(pattern));
+                    const isExcluded = excludePattern.length > 0 && excludePattern.some(pattern => filePath.includes(pattern));
                     return file.size <= fileSizeLimit && !isExcluded;
                 });
 
@@ -182,10 +183,11 @@
         });
         const updateDirectoryStructure = (files) => {
             const fileSizeLimit = document.getElementById('file-size-filter').value * 1024; // Convert kb to bytes
-            const excludePattern = document.getElementById('exclude-pattern').value.split(',').map(pattern => pattern.trim());
+            const excludePatternInput = document.getElementById('exclude-pattern').value;
+            const excludePattern = excludePatternInput ? excludePatternInput.split(',').map(pattern => pattern.trim()) : [];
             const filteredFiles = Array.from(files).filter(file => {
                 const filePath = file.webkitRelativePath;
-                const isExcluded = excludePattern.some(pattern => filePath.includes(pattern));
+                const isExcluded = excludePattern.length > 0 && excludePattern.some(pattern => filePath.includes(pattern));
                 return file.size <= fileSizeLimit && !isExcluded;
             });
 
