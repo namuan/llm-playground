@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gitingest</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+</head>
+<body class="bg-gray-50">
+    <nav class="bg-white border-b border-gray-200 px-4 py-3 flex justify-between items-center">
+        <div class="text-xl font-bold">
+            Git<span class="text-red-500">ingest</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <a href="#" class="flex items-center gap-1">
+                <i class="fas fa-puzzle-piece"></i>
+                Extension
+            </a>
+            <a href="#" class="flex items-center gap-1">
+                <i class="fab fa-github"></i>
+                GitHub
+                <span class="text-yellow-500">★ 6.0k</span>
+            </a>
+        </div>
+    </nav>
+
+    <div class="max-w-4xl mx-auto p-6 space-y-4">
+        <div class="bg-[#fdf6e3] rounded-lg p-6 border border-gray-200">
+            <div class="flex items-center gap-4 mb-4">
+                <img src="https://placehold.co/30x30/00ff00/00ff00.png" alt="Green GitHub-style icon" class="w-8 h-8">
+                <div class="flex-1">
+                    <input id="directoryPath" type="text" value="" class="w-full p-2 border border-gray-300 rounded">
+                </div>
+                <button id="ingestButton" class="bg-[#f4b364] px-4 py-2 rounded text-black">Ingest</button>
+            </div>
+            <div class="flex items-center gap-4">
+                <select class="border border-gray-300 rounded p-2">
+                    <option>Exclude</option>
+                </select>
+                <input type="text" placeholder="*md,.src/" class="flex-1 p-2 border border-gray-300 rounded">
+                <div class="flex items-center gap-2">
+                    <span id="file-size-filter-display" class="text-sm">Include files under: 50kb</span>
+                    <input id="file-size-filter" type="range" class="w-32">
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg p-6 border border-gray-200">
+            <div class="flex justify-between mb-4">
+                <h2 class="font-semibold">Summary</h2>
+                <button class="border border-gray-300 rounded px-3 py-1 flex items-center gap-1">
+                    <i class="far fa-copy"></i> Copy
+                </button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-[#fdf6e3] p-4 rounded">
+                    <pre id="repo-files-summary" class="text-sm" style="max-height: 150px; overflow-y: auto;"></pre>
+                    <div class="flex gap-2 mt-4">
+                        <button class="flex items-center gap-1 border border-gray-300 rounded px-3 py-1 bg-white">
+                            <i class="fas fa-download"></i> Download
+                        </button>
+                        <button class="flex items-center gap-1 border border-gray-300 rounded px-3 py-1 bg-white">
+                            <i class="far fa-copy"></i> Copy all
+                        </button>
+                    </div>
+                </div>
+                <div class="bg-[#fdf6e3] p-4 rounded">
+                    <pre id="repo-directory-structure" class="text-sm"></pre>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <div class="flex justify-between mb-2">
+                    <h2 class="font-semibold">Files Content</h2>
+                    <button class="border border-gray-300 rounded px-3 py-1 flex items-center gap-1">
+                        <i class="far fa-copy"></i> Copy
+                    </button>
+                </div>
+                <div class="bg-[#fdf6e3] p-4 rounded">
+                    <pre class="text-sm">File: README.md</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('ingestButton').addEventListener('click', function() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.webkitdirectory = true; // Allows directory selection
+            input.onchange = e => {
+                const files = e.target.files;
+                if (files.length > 0) {
+                    const directoryPath = files[0].webkitRelativePath.split('/')[0];
+                    const topLevelDirectory = files[0].webkitRelativePath.split('/')[0];
+                    document.getElementById('directoryPath').value = topLevelDirectory;
+                    console.log('Selected top-level directory:', topLevelDirectory);
+
+                    // Example summary data
+                    const repoSummary = `Repository: ${topLevelDirectory}\nFiles analyzed: ${files.length}\n\nEstimated tokens: 7.8k`;
+                    
+                    // Generate directory structure
+                    const directoryStructure = Array.from(files).reduce((acc, file) => {
+                        const pathParts = file.webkitRelativePath.split('/');
+                        pathParts.pop(); // Remove the file name
+                        let currentLevel = acc;
+                        pathParts.forEach(part => {
+                            if (!currentLevel[part]) {
+                                currentLevel[part] = {};
+                            }
+                            currentLevel = currentLevel[part];
+                        });
+                        return acc;
+                    }, {});
+
+                    // Include files in the directory structure
+                    const directoryStructureWithFiles = Array.from(files).reduce((acc, file) => {
+                        const pathParts = file.webkitRelativePath.split('/');
+                        let currentLevel = acc;
+                        pathParts.forEach((part, index) => {
+                            if (!currentLevel[part]) {
+                                currentLevel[part] = index === pathParts.length - 1 ? null : {};
+                            }
+                            currentLevel = currentLevel[part];
+                        });
+                        return acc;
+                    }, {});
+
+                    // Convert directory structure with files to a string
+                    const structureToString = (obj, indent = '') => {
+                        if (obj === null) return ''; // If it's a file, return an empty string
+                        return Object.keys(obj).map(key => {
+                            const subStructure = structureToString(obj[key], indent + '    ');
+                            return `${indent}├── ${key}\n${subStructure}`;
+                        }).join('');
+                    };
+
+                    // Skip the top-level directory
+                    const skipTopLevel = (structure) => {
+                        const keys = Object.keys(structure);
+                        if (keys.length === 1) {
+                            return structure[keys[0]];
+                        }
+                        return structure;
+                    };
+
+                    const directoryStructureString = structureToString(skipTopLevel(directoryStructureWithFiles));
+                    document.getElementById('repo-directory-structure').innerText = `Directory structure:\n${directoryStructureString}`;
+                    document.getElementById('repo-files-summary').innerText = repoSummary;
+
+                    // Adjust scroll bar based on the number of files
+                    const repoFilesSummary = document.getElementById('repo-files-summary');
+                    const repoDirectoryStructure = document.getElementById('repo-directory-structure');
+
+                    if (files.length > 50) {
+                        repoFilesSummary.style.overflowY = 'auto';
+                        repoFilesSummary.style.maxHeight = '150px';
+                        repoDirectoryStructure.style.overflowY = 'auto';
+                        repoDirectoryStructure.style.maxHeight = '150px';
+                    } else {
+                        repoFilesSummary.style.overflowY = 'hidden';
+                        repoFilesSummary.style.maxHeight = 'none';
+                        repoDirectoryStructure.style.overflowY = 'hidden';
+                        repoDirectoryStructure.style.maxHeight = 'none';
+                    }
+                }
+            };
+            input.click();
+        });
+    </script>
+</body>
+</html>
