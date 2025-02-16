@@ -86,12 +86,15 @@
     </div>
 
     <script>
+        let storedFiles = [];
+
         document.getElementById('ingestButton').addEventListener('click', function() {
             const input = document.createElement('input');
             input.type = 'file';
             input.webkitdirectory = true; // Allows directory selection
             input.onchange = e => {
                 const files = e.target.files;
+                storedFiles = Array.from(files);
                 const fileSizeLimit = document.getElementById('file-size-filter').value * 1024; // Convert kb to bytes
                 const filteredFiles = Array.from(files).filter(file => file.size <= fileSizeLimit);
 
@@ -213,14 +216,9 @@
         document.getElementById('file-size-filter').addEventListener('input', function() {
             const fileSize = this.value;
             document.getElementById('file-size-filter-display').innerText = `Include files under: ${fileSize}kb`;
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.webkitdirectory = true; // Allows directory selection
-            input.onchange = e => {
-                const files = e.target.files;
-                updateDirectoryStructure(files);
-            };
-            input.click();
+            if (storedFiles.length > 0) {
+                updateDirectoryStructure(storedFiles);
+            }
         });
     </script>
 </body>
