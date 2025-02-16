@@ -96,7 +96,12 @@
                 const files = e.target.files;
                 storedFiles = Array.from(files);
                 const fileSizeLimit = document.getElementById('file-size-filter').value * 1024; // Convert kb to bytes
-                const filteredFiles = Array.from(files).filter(file => file.size <= fileSizeLimit);
+                const excludePattern = document.getElementById('exclude-pattern').value.split(',').map(pattern => pattern.trim());
+                const filteredFiles = Array.from(files).filter(file => {
+                    const filePath = file.webkitRelativePath;
+                    const isExcluded = excludePattern.some(pattern => filePath.includes(pattern));
+                    return file.size <= fileSizeLimit && !isExcluded;
+                });
 
                 if (filteredFiles.length > 0) {
                     const directoryPath = files[0].webkitRelativePath.split('/')[0];
@@ -177,7 +182,12 @@
         });
         const updateDirectoryStructure = (files) => {
             const fileSizeLimit = document.getElementById('file-size-filter').value * 1024; // Convert kb to bytes
-            const filteredFiles = Array.from(files).filter(file => file.size <= fileSizeLimit);
+            const excludePattern = document.getElementById('exclude-pattern').value.split(',').map(pattern => pattern.trim());
+            const filteredFiles = Array.from(files).filter(file => {
+                const filePath = file.webkitRelativePath;
+                const isExcluded = excludePattern.some(pattern => filePath.includes(pattern));
+                return file.size <= fileSizeLimit && !isExcluded;
+            });
 
             if (filteredFiles.length > 0) {
                 const directoryStructureWithFiles = filteredFiles.reduce((acc, file) => {
