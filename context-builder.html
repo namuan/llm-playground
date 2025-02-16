@@ -41,7 +41,7 @@
                 <input type="text" placeholder="*md,.src/" class="flex-1 p-2 border border-gray-300 rounded">
                 <div class="flex items-center gap-2">
                     <span id="file-size-filter-display" class="text-sm">Include files under: 50kb</span>
-                    <input id="file-size-filter" type="range" class="w-32">
+                    <input id="file-size-filter" type="range" class="w-32" min="0" max="100" value="50">
                 </div>
             </div>
         </div>
@@ -168,6 +168,10 @@
                 }
             };
             input.click();
+        });
+        document.getElementById('file-size-filter').addEventListener('input', function() {
+            const fileSize = this.value;
+            document.getElementById('file-size-filter-display').innerText = `Include files under: ${fileSize}kb`;
         });
     </script>
 </body>
