@@ -121,6 +121,7 @@ celerybeat.pid
 
 # Environments
 .env
+.grok.env
 .venv
 env/
 venv/
