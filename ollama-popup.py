@@ -33,7 +33,7 @@ def get_chat_modes():
 
 # Ollama configuration and model
 OLLAMA_ENDPOINT = "http://localhost:11434/api/generate"
-OLLAMA_SELECTED_MODEL = "llama3.2:latest"
+OLLAMA_SELECTED_MODEL = "gemma3:1b"
 
 # Kokoro voice settings
 MODEL_VOICES_PATH = Path.home() / "models/onnx/kokoro/voices.json"
