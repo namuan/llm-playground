@@ -54,7 +54,7 @@ class ApiWorker(QObject):
                 return
 
             with requests.post(
-                url, json=payload, headers=headers, stream=True
+                    url, json=payload, headers=headers, stream=True
             ) as response:
                 response.raise_for_status()
                 for line in response.iter_lines():
@@ -263,7 +263,6 @@ class AppWindow(QMainWindow):
 
     def apply_styles(self):
         """Applies QSS to style the application widgets."""
-        # Using lowercase "sans-serif" for better cross-platform compatibility.
         style_sheet = """
             #centralWidget {
                 background-color: #FFFFFF;
@@ -272,8 +271,8 @@ class AppWindow(QMainWindow):
             }
 
             QComboBox, QPushButton, QTextEdit {
-                font-family: sans-serif;
-                font-size: 13px;
+                font-family: "Fantasque Sans Mono";
+                font-size: 18px;
             }
 
             QComboBox, QPushButton {
