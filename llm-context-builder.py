@@ -79,11 +79,13 @@ def download_and_extract_repo(zip_url, target_folder):
     return target_folder
 
 
-def find_files(directory, extensions, ignored_dirs, print_contents):
+def find_files(directory, extensions, ignored_dirs, ignored_files, print_contents):
     for root, dirs, files in os.walk(directory):
         dirs[:] = [d for d in dirs if d not in ignored_dirs]
 
         for file in files:
+            if file in ignored_files:
+                continue
             if any(file.endswith(ext) for ext in extensions):
                 file_path = os.path.join(root, file)
                 logging.info(f"Found file: {file_path}")
@@ -116,6 +118,12 @@ def main():
         nargs="*",
         default=[],
         help="List of directories to ignore",
+    )
+    parser.add_argument(
+        "--ignored_files",
+        nargs="*",
+        default=[],
+        help="List of files to ignore",
     )
     parser.add_argument(
         "-p",
@@ -158,7 +166,13 @@ def main():
     else:
         search_path = "."
 
-    find_files(search_path, args.extensions, args.ignored_dirs, args.print_contents)
+    find_files(
+        search_path,
+        args.extensions,
+        args.ignored_dirs,
+        args.ignored_files,
+        args.print_contents,
+    )
 
 
 if __name__ == "__main__":
