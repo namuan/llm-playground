@@ -4,7 +4,7 @@ This script can search for files locally or in a GitHub repository.
 It can filter by file extensions, ignore specified directories, and optionally print file contents.
 
 Usage:
-python3 llm-context-builder.py --extensions .json .py --ignored_dirs build dist --print_contents > context.py
+python3 llm-context-builder.py --extensions .json .py --ignored_dirs build dist --ignored_files package-lock.json --print_contents > context.py
 python3 llm-context-builder.py --github_url https://github.com/motion-canvas/motion-canvas/tree/main/packages/docs/docs --extensions .md .mdx  --print_contents > motion-canvas.md
 """
 
