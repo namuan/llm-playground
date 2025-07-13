@@ -7,7 +7,7 @@
 """
 This script can search for files locally or in a GitHub repository.
 It can filter by file extensions, ignore specified directories, and optionally print file contents.
-Use --temp_file with _
+Use --temp_file with --print_contents to save the output to a temporary file and copy the path to the clipboard.
 
 Usage:
 python3 llm-context-builder.py --extensions .json .py --ignored_dirs build dist --ignored_files package-lock.json --print_contents > context.py
