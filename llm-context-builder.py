@@ -1,7 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = [
+#   "pyperclip",
+# ]
+# ///
 """
 This script can search for files locally or in a GitHub repository.
 It can filter by file extensions, ignore specified directories, and optionally print file contents.
+Use --temp_file with _
 
 Usage:
 python3 llm-context-builder.py --extensions .json .py --ignored_dirs build dist --ignored_files package-lock.json --print_contents > context.py
@@ -17,6 +23,8 @@ from argparse import ArgumentParser
 from argparse import RawDescriptionHelpFormatter
 from urllib.parse import urljoin
 from urllib.parse import urlparse
+import platform
+import sys
 from zipfile import ZipFile
 
 from logger import setup_logging
@@ -79,7 +87,14 @@ def download_and_extract_repo(zip_url, target_folder):
     return target_folder
 
 
-def find_files(directory, extensions, ignored_dirs, ignored_files, print_contents):
+def find_files(
+    directory,
+    extensions,
+    ignored_dirs,
+    ignored_files,
+    print_contents,
+    output_stream=sys.stdout,
+):
     for root, dirs, files in os.walk(directory):
         dirs[:] = [d for d in dirs if d not in ignored_dirs]
 
@@ -93,9 +108,9 @@ def find_files(directory, extensions, ignored_dirs, ignored_files, print_content
                 if print_contents:
                     try:
                         with open(file_path, encoding="utf-8") as f:
-                            print(f"# File: {file_path}")
-                            print(f.read())
-                            print("# " + ("-" * 50))  # Separator
+                            print(f"# File: {file_path}", file=output_stream)
+                            print(f.read(), file=output_stream)
+                            print("# " + ("-" * 50), file=output_stream)
                     except Exception as e:
                         logging.error(f"Error reading file {file_path}: {e}")
 
@@ -132,6 +147,11 @@ def main():
         help="Flag to print file contents",
     )
     parser.add_argument(
+        "--temp_file",
+        action="store_true",
+        help="Save output to a temporary file and copy path to clipboard.",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="count", default=0, help="Increase output verbosity"
     )
 
@@ -166,13 +186,54 @@ def main():
     else:
         search_path = "."
 
-    find_files(
-        search_path,
-        args.extensions,
-        args.ignored_dirs,
-        args.ignored_files,
-        args.print_contents,
-    )
+    if args.temp_file:
+        if not args.print_contents:
+            logging.warning("--temp_file requires --print_contents to be useful.")
+            sys.exit(1)
+
+        temp_f = tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".txt", encoding="utf-8"
+        )
+        find_files(
+            search_path,
+            args.extensions,
+            args.ignored_dirs,
+            args.ignored_files,
+            args.print_contents,
+            output_stream=temp_f,
+        )
+        temp_f.close()
+        temp_file_path = temp_f.name
+
+        try:
+            import pyperclip
+
+            pyperclip.copy(temp_file_path)
+            logging.info("Copied temporary file path to clipboard.")
+        except ImportError:
+            logging.warning(
+                "`pyperclip` not found. Skipping clipboard copy. `pip install pyperclip` to enable."
+            )
+        except Exception as e:
+            logging.error(f"Could not copy to clipboard: {e}.")
+
+        system = platform.system()
+        open_command = "open"
+        if system == "Windows":
+            open_command = "start"
+        elif system == "Linux":
+            open_command = "xdg-open"
+
+        print(f"\nContent saved to temporary file: {temp_file_path}")
+        print(f"To open it, run: {open_command} {temp_file_path}")
+    else:
+        find_files(
+            search_path,
+            args.extensions,
+            args.ignored_dirs,
+            args.ignored_files,
+            args.print_contents,
+        )
 
 
 if __name__ == "__main__":
