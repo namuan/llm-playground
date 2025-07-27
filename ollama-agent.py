@@ -6,7 +6,7 @@
 # ]
 # ///
 # Description: A script to interact with Ollama via LiteLLM using file manipulation tools.
-# Example: ./ollama-agent.py [-v | -vv | -vvv]
+# Example: ./ollama-agent.py [-v | -vv | -vvv] [--model MODEL]
 import argparse
 import json
 import logging
@@ -177,6 +177,11 @@ def main():
         default=0,
         help="Increase logging verbosity: -v for WARNING, -vv for INFO, -vvv for DEBUG"
     )
+    parser.add_argument(
+        "--model",
+        default="ollama_chat/qwen3:4b",
+        help="Specify the Ollama model to use (default: ollama_chat/qwen3:4b)"
+    )
     args = parser.parse_args()
 
     logger = configure_logging(args.verbose)
@@ -192,9 +197,9 @@ def main():
             logger.debug("Received EOF, exiting")
             return None, False
 
-    agent_run(get_user_message, get_tool_definitions())
+    agent_run(get_user_message, get_tool_definitions(), args.model)
 
-def agent_run(get_user_message: Callable, tools: list):
+def agent_run(get_user_message: Callable, tools: list, model: str):
     logger = logging.getLogger(__name__)
     conversation = []
     logger.debug("Starting agent run")
@@ -211,7 +216,7 @@ def agent_run(get_user_message: Callable, tools: list):
             conversation.append({"role": "user", "content": user_input})
             logger.debug(f"Appended user message to conversation: {user_input}")
 
-        response = run_inference(conversation, tools)
+        response = run_inference(conversation, tools, model)
         logger.debug(f"Received response: {response}")
         content = response["content"]
         # Serialize content to string if it's a list
@@ -239,7 +244,7 @@ def agent_run(get_user_message: Callable, tools: list):
         conversation.append({"role": "user", "content": json.dumps(tool_results)})
         logger.debug(f"Appended tool results to conversation: {tool_results}")
 
-def run_inference(conversation: list, tools: list):
+def run_inference(conversation: list, tools: list, model: str):
     logger = logging.getLogger(__name__)
     tools_spec = [
         {
@@ -262,7 +267,7 @@ def run_inference(conversation: list, tools: list):
             modified_conversation.append(modified_message)
 
         response = litellm.completion(
-            model="ollama_chat/qwen3:4b",
+            model=model,
             messages=modified_conversation,
             api_base="http://localhost:11434",
             tools=tools_spec
