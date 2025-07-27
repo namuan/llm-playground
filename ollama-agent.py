@@ -6,25 +6,35 @@
 # ]
 # ///
 # Description: A script to interact with Ollama via LiteLLM using file manipulation tools.
-# Example: ./ollama-agent.py
+# Example: ./ollama-agent.py [-v | -vv | -vvv]
 import litellm
 import sys
 import json
 import os
 import logging
+import argparse
 from typing import Tuple, Optional, Callable, Any
 from jsonschema import Draft7Validator
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
-logger = logging.getLogger(__name__)
+def configure_logging(verbose_count: int) -> None:
+    """Configure logging based on verbose count."""
+    levels = {
+        0: logging.ERROR,   # No -v
+        1: logging.WARNING, # -v
+        2: logging.INFO,    # -vv
+        3: logging.DEBUG    # -vvv
+    }
+    level = levels.get(verbose_count, logging.DEBUG)  # Default to DEBUG for >3
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
+    return logging.getLogger(__name__)
 
 def generate_schema(python_type: Any) -> dict:
     """Generate JSON schema for a given Python type with descriptions."""
+    logger = logging.getLogger(__name__)
     logger.debug(f"Generating schema for {python_type.__name__}")
     schema = {
         "type": "object",
@@ -64,11 +74,8 @@ class ToolDefinition:
         self.input_schema = input_schema
         self.function = function
 
-read_file_schema = generate_schema(ReadFileInput)
-list_files_schema = generate_schema(ListFilesInput)
-edit_file_schema = generate_schema(EditFileInput)
-
 def read_file(input_data: dict) -> tuple[str, Optional[str]]:
+    logger = logging.getLogger(__name__)
     logger.debug(f"Executing read_file with input: {input_data}")
     try:
         with open(input_data["path"], "r") as f:
@@ -80,6 +87,7 @@ def read_file(input_data: dict) -> tuple[str, Optional[str]]:
         return "", str(e)
 
 def list_files(input_data: dict) -> tuple[str, Optional[str]]:
+    logger = logging.getLogger(__name__)
     logger.debug(f"Executing list_files with input: {input_data}")
     try:
         dir_path = input_data.get("path", ".")
@@ -99,6 +107,7 @@ def list_files(input_data: dict) -> tuple[str, Optional[str]]:
         return "", str(e)
 
 def edit_file(input_data: dict) -> tuple[str, Optional[str]]:
+    logger = logging.getLogger(__name__)
     logger.debug(f"Executing edit_file with input: {input_data}")
     try:
         if input_data["path"] == "" or input_data["old_str"] == input_data["new_str"]:
@@ -131,29 +140,48 @@ def edit_file(input_data: dict) -> tuple[str, Optional[str]]:
         logger.error(f"Error in edit_file: {str(e)}")
         return "", str(e)
 
-read_file_definition = ToolDefinition(
-    name="read_file",
-    description="Read the contents of a given relative file path. Use this to see what's inside a file. Do not use with directory names.",
-    input_schema=read_file_schema,
-    function=read_file
-)
+def get_tool_definitions() -> list:
+    """Return list of tool definitions."""
+    read_file_schema = generate_schema(ReadFileInput)
+    list_files_schema = generate_schema(ListFilesInput)
+    edit_file_schema = generate_schema(EditFileInput)
 
-list_files_definition = ToolDefinition(
-    name="list_files",
-    description="List files and directories at a given path. If no path is provided, lists files in the current directory.",
-    input_schema=list_files_schema,
-    function=list_files
-)
-
-edit_file_definition = ToolDefinition(
-    name="edit_file",
-    description="Make edits to a text file. Replaces 'old_str' with 'new_str' in the given file. 'old_str' and 'new_str' MUST be different. If the file doesn't exist, it will be created if old_str is empty.",
-    input_schema=edit_file_schema,
-    function=edit_file
-)
+    return [
+        ToolDefinition(
+            name="read_file",
+            description="Read the contents of a given relative file path. Use this to see what's inside a file. Do not use with directory names.",
+            input_schema=read_file_schema,
+            function=read_file
+        ),
+        ToolDefinition(
+            name="list_files",
+            description="List files and directories at a given path. If no path is provided, lists files in the current directory.",
+            input_schema=list_files_schema,
+            function=list_files
+        ),
+        ToolDefinition(
+            name="edit_file",
+            description="Make edits to a text file. Replaces 'old_str' with 'new_str' in the given file. 'old_str' and 'new_str' MUST be different. If the file doesn't exist, it will be created if old_str is empty.",
+            input_schema=edit_file_schema,
+            function=edit_file
+        )
+    ]
 
 def main():
+    parser = argparse.ArgumentParser(description="Interact with Ollama via LiteLLM")
+    parser.add_argument(
+        "-v", "--verbose",
+        action="count",
+        default=0,
+        help="Increase logging verbosity: -v for WARNING, -vv for INFO, -vvv for DEBUG"
+    )
+    args = parser.parse_args()
+
+    logger = configure_logging(args.verbose)
+    logger.debug("Starting main function")
+
     def get_user_message() -> Tuple[Optional[str], bool]:
+        logger = logging.getLogger(__name__)
         try:
             user_input = input("\033[94mYou\033[0m: ")
             logger.debug(f"Received user input: {user_input}")
@@ -162,9 +190,10 @@ def main():
             logger.debug("Received EOF, exiting")
             return None, False
 
-    agent_run(get_user_message, [read_file_definition, list_files_definition, edit_file_definition])
+    agent_run(get_user_message, get_tool_definitions())
 
 def agent_run(get_user_message: Callable, tools: list):
+    logger = logging.getLogger(__name__)
     conversation = []
     logger.debug("Starting agent run")
     print("Chat with Ollama (use 'ctrl-c' to quit)")
@@ -209,6 +238,7 @@ def agent_run(get_user_message: Callable, tools: list):
         logger.debug(f"Appended tool results to conversation: {tool_results}")
 
 def run_inference(conversation: list, tools: list):
+    logger = logging.getLogger(__name__)
     tools_spec = [
         {
             "type": "function",
@@ -257,6 +287,7 @@ def run_inference(conversation: list, tools: list):
         return {"content": [{"type": "text", "text": f"Error: {str(e)}"}]}
 
 def execute_tool(tool_use_id: str, name: str, input_data: dict, tools: list):
+    logger = logging.getLogger(__name__)
     logger.debug(f"Attempting to execute tool: {name} with input: {input_data}")
     for tool in tools:
         if tool.name == name:
