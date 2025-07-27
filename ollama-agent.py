@@ -7,16 +7,18 @@
 # ///
 # Description: A script to interact with Ollama via LiteLLM using file manipulation tools.
 # Example: ./ollama-agent.py [-v | -vv | -vvv]
-import litellm
-import sys
-import json
-import os
-import logging
 import argparse
+import json
+import logging
+import os
+import sys
+from logging import Logger
 from typing import Tuple, Optional, Callable, Any
-from jsonschema import Draft7Validator
 
-def configure_logging(verbose_count: int) -> None:
+import litellm
+
+
+def configure_logging(verbose_count: int) -> Logger:
     """Configure logging based on verbose count."""
     levels = {
         0: logging.ERROR,   # No -v
