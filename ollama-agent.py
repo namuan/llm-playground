@@ -182,17 +182,20 @@ def agent_run(get_user_message: Callable, tools: list):
 
         response = run_inference(conversation, tools)
         logger.debug(f"Received response: {response}")
-        conversation.append({"role": "assistant", "content": response["content"]})
-        logger.debug(f"Appended assistant response to conversation: {response['content']}")
+        content = response["content"]
+        # Serialize content to string if it's a list
+        serialized_content = json.dumps(content) if isinstance(content, list) else content
+        conversation.append({"role": "assistant", "content": serialized_content})
+        logger.debug(f"Appended assistant response to conversation: {serialized_content}")
 
         tool_results = []
-        for content in response["content"]:
-            logger.debug(f"Processing content block: {content}")
-            if content["type"] == "text":
-                print(f"\033[93mOllama\033[0m: {content['text']}")
-            elif content["type"] == "tool_use":
-                logger.debug(f"Tool use detected: {content['name']} with input {content['input']}")
-                result = execute_tool(content["tool_use_id"], content["name"], content["input"], tools)
+        for content_block in content if isinstance(content, list) else [content]:
+            logger.debug(f"Processing content block: {content_block}")
+            if isinstance(content_block, dict) and content_block.get("type") == "text":
+                print(f"\033[93mOllama\033[0m: {content_block['text']}")
+            elif isinstance(content_block, dict) and content_block.get("type") == "tool_use":
+                logger.debug(f"Tool use detected: {content_block['name']} with input {content_block['input']}")
+                result = execute_tool(content_block["tool_use_id"], content_block["name"], content_block["input"], tools)
                 logger.debug(f"Tool execution result: {result}")
                 tool_results.append(result)
 
@@ -218,9 +221,17 @@ def run_inference(conversation: list, tools: list):
     ]
     logger.debug(f"Tools specification: {tools_spec}")
     try:
+        # Convert any list-based content to string before sending to API
+        modified_conversation = []
+        for message in conversation:
+            modified_message = message.copy()
+            if isinstance(message["content"], list):
+                modified_message["content"] = json.dumps(message["content"])
+            modified_conversation.append(modified_message)
+
         response = litellm.completion(
             model="ollama_chat/qwen3:4b",
-            messages=conversation,
+            messages=modified_conversation,
             api_base="http://localhost:11434",
             tools=tools_spec
         )
