@@ -6,7 +6,10 @@
 # ///
 """
 Fetches all models from OpenRouter API and filters for free ones
-Run with: uv run openrouter-free-models.py
+$ uv run openrouter-free-models.py
+Link with Aider
+$ ln -s ~/workspace/llm-playground/openrouter-free-models.py ~/bin/openrouter-free-models.py
+$ aider --model openrouter/$(openrouter-free-models.py | fzf | awk '{print $2}')
 """
 
 import json
