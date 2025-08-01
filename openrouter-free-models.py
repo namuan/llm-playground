@@ -14,6 +14,7 @@ $ aider --model openrouter/$(openrouter-free-models.py | fzf | awk '{print $2}')
 
 import json
 import sys
+import argparse
 
 import requests
 
@@ -77,15 +78,28 @@ def get_free_openrouter_models(names_only=False):
         return []
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Fetch free models from OpenRouter API")
+    parser.add_argument(
+        "--names-only",
+        action="store_true",
+        help="Return only model IDs (names) one per line"
+    )
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Save results to openrouter-free-models.json"
+    )
+    return parser.parse_args()
+
+
 # Run the function if this script is executed directly
 if __name__ == "__main__":
-    # Check for --names-only flag
-    names_only = "--names-only" in sys.argv
-    free_models = get_free_openrouter_models(names_only=names_only)
+    args = parse_args()
+    free_models = get_free_openrouter_models(names_only=args.names_only)
 
     # Optional: Save to JSON file
-    save_to_file = "--save" in sys.argv
-    if save_to_file:
+    if args.save:
         try:
             with open("openrouter-free-models.json", "w", encoding="utf-8") as f:
                 json.dump(free_models, f, indent=2)
