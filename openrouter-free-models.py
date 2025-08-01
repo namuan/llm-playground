@@ -18,7 +18,7 @@ import sys
 import requests
 
 
-def get_free_openrouter_models():
+def get_free_openrouter_models(names_only=False):
     try:
         print("Fetching models from OpenRouter...")
 
@@ -53,14 +53,19 @@ def get_free_openrouter_models():
 
         # Display the free models
         if free_models:
-            for index, model in enumerate(free_models, 1):
-                name = (
-                    model["name"]
-                    if "name" in model and model["name"] != model["id"]
-                    else model["id"]
-                )
-                context_length_k = f"{model['context_length']/1000:.0f}K"
-                print(f"- {model['id']} - {name} - Context Length: {context_length_k}")
+            if names_only:
+                # Return only model IDs (names) one per line
+                for model in free_models:
+                    print(model["id"])
+            else:
+                for index, model in enumerate(free_models, 1):
+                    name = (
+                        model["name"]
+                        if "name" in model and model["name"] != model["id"]
+                        else model["id"]
+                    )
+                    context_length_k = f"{model['context_length']/1000:.0f}K"
+                    print(f"- {model['id']} - {name} - Context Length: {context_length_k}")
         else:
             print("No free models found.")
 
@@ -74,7 +79,9 @@ def get_free_openrouter_models():
 
 # Run the function if this script is executed directly
 if __name__ == "__main__":
-    free_models = get_free_openrouter_models()
+    # Check for --names-only flag
+    names_only = "--names-only" in sys.argv
+    free_models = get_free_openrouter_models(names_only=names_only)
 
     # Optional: Save to JSON file
     save_to_file = "--save" in sys.argv
