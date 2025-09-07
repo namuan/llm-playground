@@ -21,22 +21,42 @@ import os
 import sys
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from collections import namedtuple, defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, List, Dict, Set, Tuple, Callable
-
-logger = logging.getLogger(__name__)
 
 try:
     import tiktoken
 except ImportError:
-    logger.error("tiktoken is required. Install with: pip install tiktoken")
+    print("Error: tiktoken is required. Install with: pip install tiktoken")
     sys.exit(1)
 
-from dataclasses import dataclass
-import networkx as nx
-from grep_ast import TreeContext
-import sqlite3
-from tree_sitter import QueryCursor, Query
+try:
+    import networkx as nx
+except ImportError:
+    print("Error: networkx is required. Install with: pip install networkx")
+    sys.exit(1)
+
+try:
+    from grep_ast import TreeContext, filename_to_lang
+    from grep_ast.tsl import get_language, get_parser
+except ImportError:
+    print("Error: grep-ast is required. Install with: pip install grep-ast")
+    sys.exit(1)
+
+try:
+    import sqlite3
+except ImportError:
+    print("Error: sqlite3 is part of Python standard library")
+    sys.exit(1)
+
+try:
+    from tree_sitter import QueryCursor, Query
+except ImportError:
+    print("Error: tree-sitter is required. Install with: pip install tree-sitter")
+    sys.exit(1)
+
+logger = logging.getLogger(__name__)
 
 # Tag namedtuple for storing parsed code definitions and references
 Tag = namedtuple("Tag", "rel_fname fname line name kind".split())
@@ -387,13 +407,6 @@ class RepoMap:
 
     def get_tags_raw(self, fname: str, rel_fname: str) -> List[Tag]:
         """Parse file to extract tags using Tree-sitter."""
-        try:
-            from grep_ast import filename_to_lang
-            from grep_ast.tsl import get_language, get_parser
-        except ImportError:
-            logger.error("grep-ast is required. Install with: pip install grep-ast")
-            sys.exit(1)
-
         lang = filename_to_lang(fname)
         if not lang:
             return []
