@@ -16,12 +16,15 @@ A command-line tool that generates a "map" of a software repository,
 highlighting important files and definitions based on their relevance.
 Uses Tree-sitter for parsing and PageRank for ranking importance.
 """
+import logging
 import os
 import sys
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from collections import namedtuple, defaultdict
 from pathlib import Path
 from typing import Optional, List, Dict, Set, Tuple, Callable
+
+logger = logging.getLogger(__name__)
 
 try:
     import tiktoken
@@ -33,16 +36,10 @@ from dataclasses import dataclass
 import networkx as nx
 from grep_ast import TreeContext
 import sqlite3
-from grep_ast import filename_to_lang
-from grep_ast.tsl import get_language, get_parser
-from tree_sitter import Query, QueryCursor
-
-import logging
+from tree_sitter import QueryCursor
 
 # Tag namedtuple for storing parsed code definitions and references
 Tag = namedtuple("Tag", "rel_fname fname line name kind".split())
-
-logger = logging.getLogger(__name__)
 
 
 def count_tokens(text: str, model_name: str = "gpt-4") -> int:
@@ -268,7 +265,7 @@ def find_src_files(directory: str) -> List[str]:
 
 def tool_output(*messages):
     """Print informational messages."""
-    logger.info(' '.join(messages))
+    logger.info(" ".join(messages))
 
 
 def tool_warning(message):
@@ -900,10 +897,11 @@ Examples:
     )
 
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="count",
         default=0,
-        help="Increase verbosity level (-v: INFO, -vv: DEBUG, default: ERROR)"
+        help="Increase verbosity level (-v: INFO, -vv: DEBUG, default: ERROR)",
     )
 
     parser.add_argument(
@@ -936,7 +934,7 @@ Examples:
     else:  # args.verbose >= 2
         log_level = logging.DEBUG
 
-    logging.basicConfig(level=log_level, format='%(levelname)s: %(message)s')
+    logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
 
     # Set up token counter with specified model
     def token_counter(text: str) -> int:
