@@ -26,7 +26,7 @@ from typing import Optional, List, Dict, Set, Tuple, Callable
 try:
     import tiktoken
 except ImportError:
-    print("Error: tiktoken is required. Install with: pip install tiktoken")
+    logger.error("tiktoken is required. Install with: pip install tiktoken")
     sys.exit(1)
 
 from dataclasses import dataclass
@@ -37,8 +37,12 @@ from grep_ast import filename_to_lang
 from grep_ast.tsl import get_language, get_parser
 from tree_sitter import Query, QueryCursor
 
+import logging
+
 # Tag namedtuple for storing parsed code definitions and references
 Tag = namedtuple("Tag", "rel_fname fname line name kind".split())
+
+logger = logging.getLogger(__name__)
 
 
 def count_tokens(text: str, model_name: str = "gpt-4") -> int:
@@ -63,23 +67,23 @@ def read_text(
         return Path(filename).read_text(encoding=encoding, errors="ignore")
     except FileNotFoundError:
         if not silent:
-            print(f"Error: {filename} not found.")
+            logger.error(f"File not found: {filename}")
         return None
     except IsADirectoryError:
         if not silent:
-            print(f"Error: {filename} is a directory.")
+            logger.error(f"Is a directory: {filename}")
         return None
     except OSError as e:
         if not silent:
-            print(f"Error reading {filename}: {e}")
+            logger.error(f"Error reading {filename}: {e}")
         return None
     except UnicodeError as e:
         if not silent:
-            print(f"Error decoding {filename}: {e}")
+            logger.error(f"Error decoding {filename}: {e}")
         return None
     except Exception as e:
         if not silent:
-            print(f"An unexpected error occurred while reading {filename}: {e}")
+            logger.error(f"Unexpected error reading {filename}: {e}")
         return None
 
 
@@ -264,17 +268,17 @@ def find_src_files(directory: str) -> List[str]:
 
 def tool_output(*messages):
     """Print informational messages."""
-    print(*messages, file=sys.stdout)
+    logger.info(' '.join(messages))
 
 
 def tool_warning(message):
     """Print warning messages."""
-    print(f"Warning: {message}", file=sys.stderr)
+    logger.warning(message)
 
 
 def tool_error(message):
     """Print error messages."""
-    print(f"Error: {message}", file=sys.stderr)
+    logger.error(message)
 
 
 @dataclass
@@ -317,6 +321,8 @@ class RepoMap:
         self.map_mul_no_files = map_mul_no_files
         self.refresh = refresh
         self.exclude_unranked = exclude_unranked
+
+        self.logger = logging.getLogger(self.__class__.__name__)
 
         # Set up output handlers
         if output_handler_funcs is None:
@@ -377,7 +383,7 @@ class RepoMap:
             return []
 
         # Cache miss or file changed
-        print(f"Calling get_tags_raw for {fname}")
+        self.logger.debug(f"Calling get_tags_raw for {fname}")
         tags = self.get_tags_raw(fname, rel_fname)
 
         return tags
@@ -388,7 +394,7 @@ class RepoMap:
             from grep_ast import filename_to_lang
             from grep_ast.tsl import get_language, get_parser
         except ImportError:
-            print("Error: grep-ast is required. Install with: pip install grep-ast")
+            logger.error("grep-ast is required. Install with: pip install grep-ast")
             sys.exit(1)
 
         lang = filename_to_lang(fname)
@@ -513,7 +519,7 @@ class RepoMap:
             included.append(fname)
 
             tags = self.get_tags(fname, rel_fname)
-            print(f"Tags for {rel_fname}: {len(tags)}")
+            self.logger.info(f"Tags for {rel_fname}: {len(tags)}")
 
             for tag in tags:
                 if tag.kind == "def":
@@ -728,7 +734,7 @@ class RepoMap:
         ranked_tags, file_report = self.get_ranked_tags(
             chat_fnames, other_fnames, mentioned_fnames, mentioned_idents
         )
-        print(f"Ranked tags count: {len(ranked_tags)}")
+        self.logger.info(f"Ranked tags count: {len(ranked_tags)}")
 
         if not ranked_tags:
             # Generate basic file information when no tags are found
@@ -820,7 +826,7 @@ class RepoMap:
             return None, FileReport({}, 0, 0, 0)  # Ensure consistent return type
 
         if map_string is None:
-            print("map_string is None")
+            self.logger.warning("map_string is None")
             return None, file_report
 
         if self.verbose:
@@ -917,6 +923,8 @@ Examples:
 
     args = parser.parse_args()
 
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+
     # Set up token counter with specified model
     def token_counter(text: str) -> int:
         return count_tokens(text, args.model)
@@ -955,8 +963,8 @@ Examples:
     # other_files for RepoMap are the effective_other_files, resolved after expansion.
     other_files = [str(Path(f).resolve()) for f in effective_other_files_unresolved]
 
-    print(f"Chat files: {chat_files}")
-    print(f"Other files: {other_files}")
+    logger.info(f"Chat files: {chat_files}")
+    logger.info(f"Other files: {other_files}")
 
     # Convert mentioned files to sets
     mentioned_fnames = set(args.mentioned_files) if args.mentioned_files else None
