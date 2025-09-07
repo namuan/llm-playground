@@ -36,7 +36,7 @@ from dataclasses import dataclass
 import networkx as nx
 from grep_ast import TreeContext
 import sqlite3
-from tree_sitter import QueryCursor
+from tree_sitter import QueryCursor, Query
 
 # Tag namedtuple for storing parsed code definitions and references
 Tag = namedtuple("Tag", "rel_fname fname line name kind".split())
@@ -421,7 +421,7 @@ class RepoMap:
             if not query_text:
                 return []
 
-            query = language.query(query_text)
+            query = Query(language, query_text)
             captures = QueryCursor(query).captures(tree.root_node)
 
             tags = []
