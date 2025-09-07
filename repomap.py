@@ -899,7 +899,12 @@ Examples:
         help="Identifiers explicitly mentioned (given higher priority)",
     )
 
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument(
+        "-v", "--verbose",
+        action="count",
+        default=0,
+        help="Increase verbosity level (-v: INFO, -vv: DEBUG, default: ERROR)"
+    )
 
     parser.add_argument(
         "--model",
@@ -923,7 +928,15 @@ Examples:
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    # Configure logging level based on verbosity
+    if args.verbose == 0:
+        log_level = logging.ERROR
+    elif args.verbose == 1:
+        log_level = logging.INFO
+    else:  # args.verbose >= 2
+        log_level = logging.DEBUG
+
+    logging.basicConfig(level=log_level, format='%(levelname)s: %(message)s')
 
     # Set up token counter with specified model
     def token_counter(text: str) -> int:
@@ -977,7 +990,7 @@ Examples:
         token_counter_func=token_counter,
         file_reader_func=read_text,
         output_handler_funcs=output_handlers,
-        verbose=args.verbose,
+        verbose=bool(args.verbose),
         max_context_window=args.max_context_window,
         exclude_unranked=args.exclude_unranked,
     )
