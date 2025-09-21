@@ -4,7 +4,8 @@
 #   "requests"
 # ]
 # ///
-
+# Setup in local bin
+# $ ln -s $(pwd)/how.py $HOME/bin/how
 import argparse
 import json
 import logging
