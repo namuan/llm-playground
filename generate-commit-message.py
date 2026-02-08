@@ -4,6 +4,29 @@
 #   "requests"
 # ]
 # ///
+"""
+Generate concise, meaningful git commit messages from diffs using a local LLM API.
+
+This script reads a git diff (either from stdin or as a command-line argument) and
+generates a commit message following conventional commits format using an LLM running
+on http://127.0.0.1:8080/v1/chat/completions (compatible with OpenAI API).
+
+Usage:
+    # Generate commit message from staged changes
+    git add . && git diff --cached | generate-commit-message | xargs -I {} git commit -m "{}"
+
+    # Generate commit message from a specific diff file
+    generate-commit-message < diff.patch
+
+    # Generate commit message from diff passed as argument
+    generate-commit-message "$(git diff --cached)"
+
+Examples:
+    feat: add user authentication system
+    fix: resolve memory leak in data processing
+    docs: update API documentation
+    refactor: simplify database connection logic
+"""
 
 import sys
 import json
@@ -55,7 +78,10 @@ def stream_sse(resp: requests.Response, verbose: int = 0):
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser()
+    
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("diff", nargs="?", default=None, help="Git diff to generate commit message for")
     args = parser.parse_args()
 
