@@ -149,15 +149,7 @@ def get_scm_fname(lang: str) -> Optional[str]:
 
     if lang in scm_files:
         scm_filename = scm_files[lang]
-
-        # Use the script's directory (determined at import time)
-        # Search in tree-sitter-language-pack
         scm_path = SCRIPT_DIR / "queries" / "tree-sitter-language-pack" / scm_filename
-        if scm_path.exists():
-            return str(scm_path)
-
-        # Search in tree-sitter-languages
-        scm_path = SCRIPT_DIR / "queries" / "tree-sitter-languages" / scm_filename
         if scm_path.exists():
             return str(scm_path)
 
