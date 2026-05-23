@@ -51,7 +51,7 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from tree_sitter import QueryCursor, Query
+    from tree_sitter import QueryCursor, Query, Parser as TSParser
 except ImportError:
     print("Error: tree-sitter is required. Install with: pip install tree-sitter")
     sys.exit(1)
@@ -306,7 +306,6 @@ class RepoMap:
 
         try:
             language = get_language(lang)
-            parser = get_parser(lang)
         except Exception as err:
             self.output_handlers["error"](f"Skipping file {fname}: {err}")
             return []
@@ -320,6 +319,8 @@ class RepoMap:
             return []
 
         try:
+            parser = TSParser()
+            parser.language = language
             tree = parser.parse(bytes(code, "utf-8"))
 
             # Load query from SCM file
@@ -343,7 +344,6 @@ class RepoMap:
                         continue
 
                     line_num = node.start_point[0] + 1
-                    # Handle potential None value
                     name = node.text.decode("utf-8") if node.text else ""
 
                     tags.append(
@@ -451,10 +451,16 @@ class RepoMap:
         if not G.nodes():
             return []
 
-        # Run PageRank
+        # Run PageRank using pure Python implementation (avoids scipy/numpy dep)
         try:
             if personalization:
-                ranks = nx.pagerank(G, personalization=personalization, alpha=0.85)
+                from networkx.algorithms.link_analysis.pagerank_alg import (
+                    _pagerank_python,
+                )
+
+                ranks = _pagerank_python(
+                    G, personalization=personalization, alpha=0.85
+                )
             else:
                 ranks = {node: 1.0 for node in G.nodes()}
         except Exception:
