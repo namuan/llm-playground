@@ -28,6 +28,7 @@ import os
 import re
 import sqlite3
 import sys
+import tempfile
 import webbrowser
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from pathlib import Path
@@ -378,7 +379,7 @@ def main(args):
         logging.error("No session specified. Use --list, --latest, or provide a session ID.")
         sys.exit(1)
 
-    if not args.latest and not session_id.startswith("ses_"):
+    if not session_id.startswith("ses_"):
         resolved = resolve_session_id(db_path, session_id, data_dirs)
         if not resolved[0]:
             sys.exit(1)
@@ -389,7 +390,7 @@ def main(args):
         sys.exit(1)
 
     output_stem_clean = re.sub(r'[^a-zA-Z0-9_-]', '_', output_stem)
-    output_file = args.output or f"{output_stem_clean}.html"
+    output_file = args.output or os.path.join(tempfile.gettempdir(), f"{output_stem_clean}.html")
 
     html = generate_html(jsonl_text, output_stem_clean + ".jsonl")
     with open(output_file, "w", encoding="utf-8") as f:
