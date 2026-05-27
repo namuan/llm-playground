@@ -70,7 +70,7 @@ def parse_github_url(url):
 
     # The folder name is the first component of the path, or the repo name if no path
     if path:
-        folder_name = path.split("/")[0]
+        folder_name = path.split("/")[-1]
     else:
         folder_name = repo
 
